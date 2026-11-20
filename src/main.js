@@ -881,32 +881,20 @@ function usesSheriffSprite(fighter) {
 }
 
 function renderSheriffSprite(ctx, fighter, scale, dt) {
+  // O arquivo atual contém apenas UM quadro de 128x320.
+  // Não avançar o sourceY: quadros inexistentes causavam o desaparecimento intermitente.
   fighter.spriteIdleTime = (fighter.spriteIdleTime || 0) + dt;
-  const spriteScale = 0.9 * scale;
+  // O renderer procedural posiciona as botas até +89 unidades abaixo da âncora.
+  // Reproduzimos a mesma linha dos pés e a mesma altura visual, sem usar a base dos prédios.
+  const spriteScale = 0.75 * scale;
   const width = 128 * spriteScale;
   const height = 320 * spriteScale;
+  const footOffset = 89 * scale;
   const idleBob = Math.sin(fighter.spriteIdleTime * 2.4) * 1.2 * scale;
-  const frame = Math.floor(fighter.spriteIdleTime / 0.2) % 4;
-  ctx.drawImage(sheriffSpriteSheet, 0, frame * 320, 128, 320, -width / 2, -height + idleBob, width, height);
-}
-
-function renderSpriteRestingArm(ctx, charData, scale, kneelY) {
-  ctx.save();
-  ctx.translate(-24 * scale, -185 * scale + kneelY);
-  ctx.rotate(-0.24);
-  ctx.fillStyle = charData.shirtColor;
-  ctx.beginPath();
-  ctx.roundRect(-7 * scale, 0, 14 * scale, 39 * scale, 6 * scale);
-  ctx.fill();
-  ctx.strokeStyle = '#17100b';
-  ctx.lineWidth = 1.5 * scale;
-  ctx.stroke();
-  ctx.fillStyle = '#d49b6a';
-  ctx.beginPath();
-  ctx.arc(0, 40 * scale, 6.5 * scale, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-  ctx.restore();
+  ctx.drawImage(
+    sheriffSpriteSheet, 0, 0, 128, 320,
+    -width / 2, -height + footOffset + idleBob, width, height
+  );
 }
 
 function renderGunbloodCharacter(ctx, fighter, role, dt, customScale = null) {
@@ -978,7 +966,6 @@ function renderGunbloodCharacter(ctx, fighter, role, dt, customScale = null) {
 
   if (useSheriffSprite) {
     renderSheriffSprite(ctx, fighter, scale, dt);
-    renderSpriteRestingArm(ctx, charData, scale, kneelY);
   } else {
     renderArticulatedLegs(ctx, charData, fighter, scale, kneelY);
     renderArticulatedTorso(ctx, charData, fighter, scale, kneelY);
@@ -986,8 +973,9 @@ function renderGunbloodCharacter(ctx, fighter, role, dt, customScale = null) {
     else renderNeckStumpGeyser(ctx, scale, kneelY);
   }
 
-  // Braço armado permanece procedural e acompanha o ângulo real da mira.
-  renderArticulatedArmedArm(ctx, charData, fighter, scale, kneelY, isP2);
+  // O Xerife recebe braço curvo/articulado compatível com a arte; os demais mantêm o renderer legado.
+  if (useSheriffSprite) renderSheriffSpriteArm(ctx, fighter, scale, isP2);
+  else renderArticulatedArmedArm(ctx, charData, fighter, scale, kneelY, isP2);
 
   ctx.restore();
 }
@@ -1169,11 +1157,171 @@ function renderArticulatedTorso(ctx, charData, fighter, S, kY) {
   });
 }
 
+
+function renderSheriffSpriteArm(ctx, fighter, scale, isP2) {
+  const shoulderX = 14 * scale;
+  const shoulderY = -56 * scale;
+  const idle = Math.sin((fighter.spriteIdleTime || 0) * 2.4) * 1.2 * scale;
+
+  ctx.save();
+  ctx.translate(shoulderX, shoulderY);
+
+  const restingOnHolster = !fighter.isDisarmed &&
+    (fighter.holdingDrum || currentPhase === 'holding' || currentPhase === 'countdown');
+
+  // Mangas com contorno e volume suave para combinar com a ilustração pintada do Xerife.
+  function strokeSleeve(path, width) {
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#24170f';
+    ctx.lineWidth = width + 3.5 * scale;
+    ctx.stroke(path);
+    const fabric = ctx.createLinearGradient(0, -12 * scale, 0, 13 * scale);
+    fabric.addColorStop(0, '#ffffff');
+    fabric.addColorStop(0.48, '#e8e6df');
+    fabric.addColorStop(1, '#b9b8b2');
+    ctx.strokeStyle = fabric;
+    ctx.lineWidth = width;
+    ctx.stroke(path);
+    ctx.restore();
+  }
+
+  function fillSleeveShape(path) {
+    ctx.save();
+    const fabric = ctx.createLinearGradient(0, -12 * scale, 0, 13 * scale);
+    fabric.addColorStop(0, '#ffffff');
+    fabric.addColorStop(0.48, '#e8e6df');
+    fabric.addColorStop(1, '#b9b8b2');
+    ctx.fillStyle = fabric;
+    ctx.strokeStyle = '#24170f';
+    ctx.lineWidth = 2.2 * scale;
+    ctx.fill(path);
+    ctx.stroke(path);
+    ctx.restore();
+  }
+
+  function drawHand(x, y, angle = 0) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    const skin = ctx.createLinearGradient(-5 * scale, -7 * scale, 6 * scale, 7 * scale);
+    skin.addColorStop(0, '#f0c39b');
+    skin.addColorStop(0.55, '#d99c70');
+    skin.addColorStop(1, '#a96845');
+    ctx.fillStyle = skin;
+    ctx.strokeStyle = '#2a160d';
+    ctx.lineWidth = 1.7 * scale;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 7.2 * scale, 8.5 * scale, 0.15, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  if (restingOnHolster) {
+    // Cotovelo flexionado; a mão repousa sobre o revólver no coldre durante a espera.
+    const upper = new Path2D();
+    upper.moveTo(0, 0);
+    upper.bezierCurveTo(9 * scale, 5 * scale, 19 * scale, 19 * scale, 18 * scale, 31 * scale);
+    strokeSleeve(upper, 15 * scale);
+
+    const forearm = new Path2D();
+    forearm.moveTo(18 * scale, 31 * scale);
+    forearm.bezierCurveTo(17 * scale, 45 * scale, 9 * scale, 60 * scale, 8 * scale, 78 * scale + idle);
+    strokeSleeve(forearm, 14 * scale);
+
+    ctx.save();
+    ctx.translate(8 * scale, 77 * scale + idle);
+    ctx.rotate(-0.12);
+    ctx.fillStyle = '#d7d5cf';
+    ctx.strokeStyle = '#24170f';
+    ctx.lineWidth = 1.5 * scale;
+    ctx.beginPath();
+    ctx.roundRect(-7 * scale, -4 * scale, 14 * scale, 8 * scale, 2.5 * scale);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+    drawHand(8 * scale, 84 * scale + idle, -0.18);
+    ctx.restore();
+    return;
+  }
+
+  if (fighter.isDisarmed) {
+    // Braço relaxado após perder a arma; continua desenhado como parte da sprite.
+    const hanging = new Path2D();
+    hanging.moveTo(0, 0);
+    hanging.bezierCurveTo(14 * scale, 8 * scale, 23 * scale, 27 * scale, 25 * scale, 47 * scale);
+    strokeSleeve(hanging, 15 * scale);
+    drawHand(25 * scale, 53 * scale, 0.15);
+    ctx.restore();
+    return;
+  }
+
+  // Braço armado acompanha a mira. A leve curva do tecido e a articulação do punho
+  // evitam o aspecto de retângulo/polígono e mantêm a mão visualmente conectada ao ombro.
+  const rot = isP2 ? Math.PI - fighter.aimAngle : fighter.aimAngle;
+  ctx.rotate(rot - fighter.recoilAngle * 0.18);
+  const armBob = idle * 0.25;
+
+  const sleeve = new Path2D();
+  sleeve.moveTo(0, -9 * scale);
+  sleeve.bezierCurveTo(12 * scale, -13 * scale, 27 * scale, -10 * scale, 40 * scale, -5 * scale + armBob);
+  sleeve.bezierCurveTo(44 * scale, -2 * scale + armBob, 44 * scale, 6 * scale + armBob, 39 * scale, 9 * scale + armBob);
+  sleeve.bezierCurveTo(25 * scale, 12 * scale, 11 * scale, 8 * scale, 0, 8 * scale);
+  fillSleeveShape(sleeve);
+
+  // Punho/camisa e mão fechada ao redor do cabo.
+  ctx.save();
+  ctx.translate(39 * scale, armBob);
+  ctx.rotate(0.04);
+  ctx.fillStyle = '#d7d5cf';
+  ctx.strokeStyle = '#24170f';
+  ctx.lineWidth = 1.5 * scale;
+  ctx.beginPath();
+  ctx.roundRect(-2 * scale, -7 * scale, 8 * scale, 14 * scale, 2 * scale);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+  drawHand(42 * scale, armBob, 0);
+
+  // Revólver: o cabo fica dentro da mão e o cano termina no mesmo ponto usado pela física.
+  ctx.save();
+  ctx.translate(42 * scale, armBob);
+  ctx.fillStyle = '#2b160b';
+  ctx.strokeStyle = '#100b08';
+  ctx.lineWidth = 1.4 * scale;
+  ctx.beginPath();
+  ctx.roundRect(-3 * scale, 1 * scale, 10 * scale, 18 * scale, [2 * scale, 2 * scale, 5 * scale, 5 * scale]);
+  ctx.fill();
+  ctx.stroke();
+
+  const metal = ctx.createLinearGradient(0, -7 * scale, 53 * scale, 7 * scale);
+  metal.addColorStop(0, '#f4f4f1');
+  metal.addColorStop(0.45, '#c6cbd0');
+  metal.addColorStop(1, '#737b83');
+  ctx.fillStyle = metal;
+  ctx.fillRect(0, -6 * scale, 17 * scale, 13 * scale);
+  ctx.strokeRect(0, -6 * scale, 17 * scale, 13 * scale);
+  ctx.fillStyle = '#929ba2';
+  ctx.fillRect(5 * scale, -4 * scale, 12 * scale, 9 * scale);
+  ctx.strokeRect(5 * scale, -4 * scale, 12 * scale, 9 * scale);
+  ctx.fillStyle = metal;
+  ctx.fillRect(17 * scale, -3 * scale, 36 * scale, 6 * scale);
+  ctx.strokeRect(17 * scale, -3 * scale, 36 * scale, 6 * scale);
+  ctx.fillStyle = '#333333';
+  ctx.fillRect(50 * scale, -5 * scale, 3 * scale, 4 * scale);
+
+  if (fighter.recoilAngle > 0.15) drawMuzzleFlash(ctx, 53 * scale, 0, scale);
+  ctx.restore();
+  ctx.restore();
+}
+
 // 3. Braço com Revólver: Articula no Ombro e Mira Diretamente no Cursor!
 function renderArticulatedArmedArm(ctx, charData, fighter, S, kY, isP2) {
   ctx.save();
   const shoulderX = 18 * S;
-  const shoulderY = (usesSheriffSprite(fighter) ? -188 * S : -52 * S) + kY;
+  const shoulderY = (usesSheriffSprite(fighter) ? -171 * S : -52 * S) + kY;
   ctx.translate(shoulderX, shoulderY);
 
   // Em P2 o contexto já está espelhado: convertemos o ângulo mundial
@@ -1483,8 +1631,9 @@ function getMuzzleWorldCoords(role) {
   const scale = Math.min(screenW, screenH) / 640;
   const kneelY = fighter.kneelProgress * (42 * scale);
 
-  const shoulderX = coords.x + (isP2 ? -18 : 18) * scale;
-  const shoulderY = coords.y + ((usesSheriffSprite(fighter) ? -188 * scale : -52 * scale) + kneelY);
+  const sheriffSprite = usesSheriffSprite(fighter);
+  const shoulderX = coords.x + fighter.knockbackX + (isP2 ? -14 : 14) * scale;
+  const shoulderY = coords.y + ((sheriffSprite ? -56 * scale : -52 * scale) + kneelY);
 
   const angle = fighter.aimAngle;
   const gunLength = 95 * scale;
@@ -1492,6 +1641,46 @@ function getMuzzleWorldCoords(role) {
   const muzzleY = shoulderY + Math.sin(angle) * gunLength;
 
   return { x: muzzleX, y: muzzleY, shoulderX, shoulderY };
+}
+
+
+function pointSegmentDistanceSquared(px, py, ax, ay, bx, by) {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const lengthSq = dx * dx + dy * dy;
+  if (lengthSq === 0) {
+    const ox = px - ax, oy = py - ay;
+    return ox * ox + oy * oy;
+  }
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lengthSq));
+  const qx = ax + t * dx;
+  const qy = ay + t * dy;
+  const ox = px - qx, oy = py - qy;
+  return ox * ox + oy * oy;
+}
+
+function segmentsCross(ax, ay, bx, by, cx, cy, dx, dy) {
+  const cross = (x1, y1, x2, y2) => x1 * y2 - y1 * x2;
+  const rx = bx - ax, ry = by - ay;
+  const sx = dx - cx, sy = dy - cy;
+  const denom = cross(rx, ry, sx, sy);
+  const qpx = cx - ax, qpy = cy - ay;
+  if (Math.abs(denom) < 1e-8) return false;
+  const t = cross(qpx, qpy, sx, sy) / denom;
+  const u = cross(qpx, qpy, rx, ry) / denom;
+  return t >= 0 && t <= 1 && u >= 0 && u <= 1;
+}
+
+function segmentIntersectsCapsule(x1, y1, x2, y2, capsule) {
+  const { ax, ay, bx, by, radius } = capsule;
+  if (segmentsCross(x1, y1, x2, y2, ax, ay, bx, by)) return true;
+  const r2 = radius * radius;
+  return Math.min(
+    pointSegmentDistanceSquared(x1, y1, ax, ay, bx, by),
+    pointSegmentDistanceSquared(x2, y2, ax, ay, bx, by),
+    pointSegmentDistanceSquared(ax, ay, x1, y1, x2, y2),
+    pointSegmentDistanceSquared(bx, by, x1, y1, x2, y2)
+  ) <= r2;
 }
 
 function getFighterActiveHitboxes(fighter, role) {
@@ -1503,47 +1692,51 @@ function getFighterActiveHitboxes(fighter, role) {
 
   const boxes = [];
 
-  // Hitboxes do sprite piloto: coordenadas ajustadas à silhueta ilustrada.
+  // Hitboxes alinhadas ao recorte 128x320 e à transformação usada por renderSheriffSprite.
+  // A âncora é a mesma dos personagens legados; a sprite termina na altura dos pés (+89 * scale).
   if (usesSheriffSprite(fighter)) {
     if (!fighter.isHeadless) {
       boxes.push({
         part: 'head',
         damage: 100,
-        x: x - 23 * scale,
-        y: y - 268 * scale + kneelY,
-        w: 46 * scale,
-        h: 88 * scale
+        x: x - 46 * scale,
+        y: y - 151 * scale + kneelY,
+        w: 92 * scale,
+        h: 104 * scale
       });
     }
+
+    // O braço é uma cápsula orientada, calculada a partir do mesmo ombro e ângulo do desenho.
+    // A colisão precisa seguir a manga, não um AABB largo que confunda braço com tronco.
+    const shoulder = getMuzzleWorldCoords(role);
+    boxes.push({
+      part: 'arm',
+      damage: 20,
+      capsule: {
+        ax: shoulder.shoulderX,
+        ay: shoulder.shoulderY,
+        bx: shoulder.shoulderX + Math.cos(fighter.aimAngle) * 42 * scale,
+        by: shoulder.shoulderY + Math.sin(fighter.aimAngle) * 42 * scale,
+        radius: 8.5 * scale
+      }
+    });
 
     boxes.push({
       part: 'torso',
       damage: 40,
       x: x - 32 * scale,
-      y: y - 184 * scale + kneelY,
-      w: 64 * scale,
-      h: 92 * scale
-    });
-
-    const shoulder = getMuzzleWorldCoords(role);
-    const armEndX = shoulder.shoulderX + Math.cos(fighter.aimAngle) * 42 * scale;
-    const armEndY = shoulder.shoulderY + Math.sin(fighter.aimAngle) * 42 * scale;
-    boxes.push({
-      part: 'arm',
-      damage: 20,
-      x: Math.min(shoulder.shoulderX, armEndX) - 8 * scale,
-      y: Math.min(shoulder.shoulderY, armEndY) - 8 * scale,
-      w: Math.abs(armEndX - shoulder.shoulderX) + 16 * scale,
-      h: Math.abs(armEndY - shoulder.shoulderY) + 16 * scale
+      y: y - 70 * scale + kneelY,
+      w: 70 * scale,
+      h: 110 * scale
     });
 
     boxes.push({
       part: 'legs',
       damage: 25,
-      x: x - 27 * scale,
-      y: y - 98 * scale,
-      w: 54 * scale,
-      h: 98 * scale
+      x: x - 43 * scale,
+      y: y + 27 * scale,
+      w: 86 * scale,
+      h: 64 * scale
     });
     return boxes;
   }
@@ -1699,9 +1892,12 @@ function updateBulletsPhysics(dt) {
       let hitFound = false;
 
       for (const box of hitboxes) {
-        if (window.DuelPhysics
-            ? window.DuelPhysics.segmentIntersectsAabb(b.prevX, b.prevY, b.x, b.y, box)
-            : checkLineAABB(b.prevX, b.prevY, b.x, b.y, box.x, box.y, box.w, box.h)) {
+        const intersectsBox = box.capsule
+          ? segmentIntersectsCapsule(b.prevX, b.prevY, b.x, b.y, box.capsule)
+          : (window.DuelPhysics
+              ? window.DuelPhysics.segmentIntersectsAabb(b.prevX, b.prevY, b.x, b.y, box)
+              : checkLineAABB(b.prevX, b.prevY, b.x, b.y, box.x, box.y, box.w, box.h));
+        if (intersectsBox) {
           hitFound = true;
           // O host (P1) é a autoridade de colisão/dano no multiplayer.
           // O convidado simula os projéteis visualmente e recebe o resultado do host.
@@ -3101,7 +3297,6 @@ function renderCharacterMiniPreview(canvasEl, charIdx, color) {
   const charData = GUNSLINGERS[charIdx];
   if (charData.id === 'sheriff' && color === OUTFIT_COLORS[0] && sheriffSpriteSheet.complete && sheriffSpriteSheet.naturalWidth > 0) {
     renderSheriffSprite(pctx, mockFighter, 0.36 / 0.9, 0);
-    renderSpriteRestingArm(pctx, charData, 0.36, 0);
     renderArticulatedArmedArm(pctx, charData, mockFighter, 0.36, 0, false);
     pctx.restore();
     return;
