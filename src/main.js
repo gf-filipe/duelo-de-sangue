@@ -1178,13 +1178,12 @@ function renderArticulatedArmedArm(ctx, charData, fighter, S, kY, isP2) {
 
   // Em P2 o contexto já está espelhado: convertemos o ângulo mundial
   // para o espaço local para que o cano aponte exatamente ao cursor.
-  let rot = isP2 ? Math.PI - fighter.aimAngle : fighter.aimAngle;
-  rot -= fighter.recoilAngle * 0.45;
+  let rot = fighter.isDisarmed ? Math.PI / 2 : (isP2 ? Math.PI - fighter.aimAngle : fighter.aimAngle);
+  if (!fighter.isDisarmed) rot -= fighter.recoilAngle * 0.45;
   ctx.rotate(rot);
 
   // Sem arma: o braço relaxa para baixo e não desenha o revólver.
   if (fighter.isDisarmed) {
-    ctx.rotate(1.05);
     ctx.fillStyle = charData.shirtColor;
     ctx.beginPath();
     ctx.roundRect(0, -8 * S, 31 * S, 16 * S, 6 * S);
@@ -2500,7 +2499,7 @@ function renderHistoryDrawer() {
   }
   list.innerHTML = duelMatchHistory.map(h => `
     <div class="hist-row">
-      R${h.round}: <b>${h.winner}</b> ${h.rt ? `(${h.rt}ms)` : ''} ${h.part === 'head' ? '💀' : h.part === 'forfeit' ? '🏳' : '🔫'}
+      R${h.round}: <b>${h.winner}</b> ${h.rt ? `(${h.rt}ms)` : ''} ${h.part === 'head' ? '💀' : h.part === 'forfeit' ? '🏳' : h.part === 'ammo' ? '⚪' : '🔫'}
     </div>
   `).join('');
 }
