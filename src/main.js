@@ -1187,6 +1187,20 @@ function renderSheriffSpriteArm(ctx, fighter, scale, isP2) {
     ctx.restore();
   }
 
+  function fillSleeveShape(path) {
+    ctx.save();
+    const fabric = ctx.createLinearGradient(0, -12 * scale, 0, 13 * scale);
+    fabric.addColorStop(0, '#ffffff');
+    fabric.addColorStop(0.48, '#e8e6df');
+    fabric.addColorStop(1, '#b9b8b2');
+    ctx.fillStyle = fabric;
+    ctx.strokeStyle = '#24170f';
+    ctx.lineWidth = 2.2 * scale;
+    ctx.fill(path);
+    ctx.stroke(path);
+    ctx.restore();
+  }
+
   function drawHand(x, y, angle = 0) {
     ctx.save();
     ctx.translate(x, y);
@@ -1255,7 +1269,7 @@ function renderSheriffSpriteArm(ctx, fighter, scale, isP2) {
   sleeve.bezierCurveTo(12 * scale, -13 * scale, 27 * scale, -10 * scale, 40 * scale, -5 * scale + armBob);
   sleeve.bezierCurveTo(44 * scale, -2 * scale + armBob, 44 * scale, 6 * scale + armBob, 39 * scale, 9 * scale + armBob);
   sleeve.bezierCurveTo(25 * scale, 12 * scale, 11 * scale, 8 * scale, 0, 8 * scale);
-  strokeSleeve(sleeve, 15 * scale);
+  fillSleeveShape(sleeve);
 
   // Punho/camisa e mão fechada ao redor do cabo.
   ctx.save();
@@ -1293,12 +1307,12 @@ function renderSheriffSpriteArm(ctx, fighter, scale, isP2) {
   ctx.fillRect(5 * scale, -4 * scale, 12 * scale, 9 * scale);
   ctx.strokeRect(5 * scale, -4 * scale, 12 * scale, 9 * scale);
   ctx.fillStyle = metal;
-  ctx.fillRect(17 * scale, -3 * scale, 38 * scale, 6 * scale);
-  ctx.strokeRect(17 * scale, -3 * scale, 38 * scale, 6 * scale);
+  ctx.fillRect(17 * scale, -3 * scale, 36 * scale, 6 * scale);
+  ctx.strokeRect(17 * scale, -3 * scale, 36 * scale, 6 * scale);
   ctx.fillStyle = '#333333';
-  ctx.fillRect(52 * scale, -5 * scale, 3 * scale, 4 * scale);
+  ctx.fillRect(50 * scale, -5 * scale, 3 * scale, 4 * scale);
 
-  if (fighter.recoilAngle > 0.15) drawMuzzleFlash(ctx, 55 * scale, 0, scale);
+  if (fighter.recoilAngle > 0.15) drawMuzzleFlash(ctx, 53 * scale, 0, scale);
   ctx.restore();
   ctx.restore();
 }
