@@ -866,6 +866,14 @@ function getFighterCoords(role) {
   return { x, y: groundY };
 }
 
+function usesSheriffSprite(fighter) {
+  const charData = GUNSLINGERS[fighter.charIdx] || GUNSLINGERS[0];
+  return charData.id === 'sheriff' &&
+    !fighter.isHeadless && !fighter.isKneeling &&
+    (!fighter.customColor || fighter.customColor === OUTFIT_COLORS[0]) &&
+    sheriffSpriteSheet.complete && sheriffSpriteSheet.naturalWidth > 0;
+}
+
 function renderSheriffSprite(ctx, fighter, scale, dt) {
   fighter.spriteIdleTime = (fighter.spriteIdleTime || 0) + dt;
   const spriteScale = 0.9 * scale;
@@ -882,7 +890,7 @@ function renderSheriffSprite(ctx, fighter, scale, dt) {
 
 function renderSpriteRestingArm(ctx, charData, scale, kneelY) {
   ctx.save();
-  ctx.translate(-24 * scale, -65 * scale + kneelY);
+  ctx.translate(-24 * scale, -185 * scale + kneelY);
   ctx.rotate(-0.24);
   ctx.fillStyle = charData.shirtColor;
   ctx.beginPath();
@@ -964,10 +972,7 @@ function renderGunbloodCharacter(ctx, fighter, role, dt, customScale = null) {
 
   // O Xerife usa o sprite piloto; personagens alternativos e estados de dano
   // continuam usando o renderer procedural até receberem seus próprios sprites.
-  const useSheriffSprite = charData.id === 'sheriff' &&
-    !fighter.isHeadless && !fighter.isKneeling &&
-    (!fighter.customColor || fighter.customColor === OUTFIT_COLORS[0]) &&
-    sheriffSpriteSheet.complete && sheriffSpriteSheet.naturalWidth > 0;
+  const useSheriffSprite = usesSheriffSprite(fighter);
 
   if (useSheriffSprite) {
     renderSheriffSprite(ctx, fighter, scale, dt);
@@ -1166,7 +1171,7 @@ function renderArticulatedTorso(ctx, charData, fighter, S, kY) {
 function renderArticulatedArmedArm(ctx, charData, fighter, S, kY, isP2) {
   ctx.save();
   const shoulderX = 18 * S;
-  const shoulderY = (-52 * S) + kY;
+  const shoulderY = (usesSheriffSprite(fighter) ? -188 * S : -52 * S) + kY;
   ctx.translate(shoulderX, shoulderY);
 
   // Em P2 o contexto já está espelhado: convertemos o ângulo mundial
@@ -1459,7 +1464,7 @@ function getMuzzleWorldCoords(role) {
   const kneelY = fighter.kneelProgress * (42 * scale);
 
   const shoulderX = coords.x + (isP2 ? -18 : 18) * scale;
-  const shoulderY = coords.y + ((-52 * scale) + kneelY);
+  const shoulderY = coords.y + ((usesSheriffSprite(fighter) ? -188 * scale : -52 * scale) + kneelY);
 
   const angle = fighter.aimAngle;
   const gunLength = 95 * scale;
@@ -1478,19 +1483,62 @@ function getFighterActiveHitboxes(fighter, role) {
 
   const boxes = [];
 
-  // 1. Cabeça (Se não decapitada!)
+  // Hitboxes do sprite piloto: coordenadas ajustadas à silhueta ilustrada.
+  if (usesSheriffSprite(fighter)) {
+    if (!fighter.isHeadless) {
+      boxes.push({
+        part: 'head',
+        damage: 100,
+        x: x - 23 * scale,
+        y: y - 268 * scale + kneelY,
+        w: 46 * scale,
+        h: 88 * scale
+      });
+    }
+
+    boxes.push({
+      part: 'torso',
+      damage: 40,
+      x: x - 32 * scale,
+      y: y - 184 * scale + kneelY,
+      w: 64 * scale,
+      h: 92 * scale
+    });
+
+    const shoulder = getMuzzleWorldCoords(role);
+    const armEndX = shoulder.shoulderX + Math.cos(fighter.aimAngle) * 42 * scale;
+    const armEndY = shoulder.shoulderY + Math.sin(fighter.aimAngle) * 42 * scale;
+    boxes.push({
+      part: 'arm',
+      damage: 20,
+      x: Math.min(shoulder.shoulderX, armEndX) - 8 * scale,
+      y: Math.min(shoulder.shoulderY, armEndY) - 8 * scale,
+      w: Math.abs(armEndX - shoulder.shoulderX) + 16 * scale,
+      h: Math.abs(armEndY - shoulder.shoulderY) + 16 * scale
+    });
+
+    boxes.push({
+      part: 'legs',
+      damage: 25,
+      x: x - 27 * scale,
+      y: y - 98 * scale,
+      w: 54 * scale,
+      h: 98 * scale
+    });
+    return boxes;
+  }
+
+  // Hitboxes legadas dos personagens ainda desenhados proceduralmente.
   if (!fighter.isHeadless) {
     boxes.push({
       part: 'head',
-      damage: 100, // Headshot instantâneo!
+      damage: 100,
       x: x - (24 * scale),
       y: y - (148 * scale) + kneelY,
       w: 48 * scale,
       h: 52 * scale
     });
   }
-
-  // 2. Tronco
   boxes.push({
     part: 'torso',
     damage: 40,
@@ -1500,7 +1548,6 @@ function getFighterActiveHitboxes(fighter, role) {
     h: 86 * scale
   });
 
-  // 3. Braço Armado
   const armX = role === 'p1' ? x + (14 * scale) : x - (40 * scale);
   boxes.push({
     part: 'arm',
@@ -1511,7 +1558,6 @@ function getFighterActiveHitboxes(fighter, role) {
     h: 56 * scale
   });
 
-  // 4. Pernas (Em pé ou Ajoelhadas!)
   if (!fighter.isKneeling) {
     boxes.push({
       part: 'legs',

@@ -136,7 +136,8 @@ canvas{display:block;}
 #matchHistoryBox{position:fixed;bottom:14px;left:14px;z-index:35;width:min(240px,42vw);display:none;}
 .hist-card{background:rgba(8,3,1,0.88);border:1px solid #5a2800;border-radius:9px;padding:9px 13px;box-shadow:0 4px 15px rgba(0,0,0,0.8);}
 .hist-title{display:flex;align-items:center;justify-content:space-between;width:100%;padding:0 0 7px;border:0;background:transparent;color:#e65c00;font-size:0.72rem;letter-spacing:2px;margin:0 0 7px;text-transform:uppercase;font-weight:bold;font-family:inherit;text-align:left;cursor:pointer;}
-.hist-title:hover{color:#ffbd55;}
+ .hist-title:hover{color:#ffbd55;}
+.hist-title:focus-visible{outline:2px solid #ffbd55;outline-offset:3px;border-radius:3px;}
 .hist-title span{font-size:1rem;transition:transform .18s ease;}
 #matchHistoryBox.collapsed .hist-title span{transform:rotate(-90deg);}
 #matchHistoryBox.collapsed #matchHistoryList{display:none;}
