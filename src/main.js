@@ -866,20 +866,17 @@ function getFighterCoords(role) {
   return { x, y: groundY };
 }
 
-function renderSheriffSprite(ctx, fighter, scale) {
-  fighter.spriteIdleTime = (fighter.spriteIdleTime || 0) + 0.016;
-  const frameSequence = [0, 1, 0, 3, 0, 2];
-  const frameIndex = frameSequence[Math.floor(fighter.spriteIdleTime / 0.42) % frameSequence.length];
-  const sourceX = (frameIndex % 2) * 128;
-  const sourceY = Math.floor(frameIndex / 2) * 320;
+function renderSheriffSprite(ctx, fighter, scale, dt) {
+  fighter.spriteIdleTime = (fighter.spriteIdleTime || 0) + dt;
   const spriteScale = 0.9 * scale;
   const width = 128 * spriteScale;
   const height = 320 * spriteScale;
+  const idleBob = Math.sin(fighter.spriteIdleTime * 2.4) * 1.2 * scale;
 
   ctx.drawImage(
     sheriffSpriteSheet,
-    sourceX, sourceY, 128, 320,
-    -width / 2, -height, width, height
+    0, 0, 128, 320,
+    -width / 2, -height + idleBob, width, height
   );
 }
 
@@ -973,7 +970,7 @@ function renderGunbloodCharacter(ctx, fighter, role, dt, customScale = null) {
     sheriffSpriteSheet.complete && sheriffSpriteSheet.naturalWidth > 0;
 
   if (useSheriffSprite) {
-    renderSheriffSprite(ctx, fighter, scale);
+    renderSheriffSprite(ctx, fighter, scale, dt);
     renderSpriteRestingArm(ctx, charData, scale, kneelY);
   } else {
     renderArticulatedLegs(ctx, charData, fighter, scale, kneelY);
