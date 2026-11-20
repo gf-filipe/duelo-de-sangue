@@ -91,7 +91,8 @@ canvas{display:block;}
 .health-track{width:min(200px,32vw);background:rgba(0,0,0,0.75);border:1px solid #552808;border-radius:5px;height:14px;overflow:hidden;position:relative;}
 .health-fill{height:100%;transition:width 0.3s ease,background 0.3s;border-radius:4px;}
 .health-num{color:#d49b43;font-size:0.75rem;font-weight:bold;text-shadow:1px 1px 0 #000;}
-.bleed-badge{background:#800000;color:#ff8888;font-size:0.65rem;padding:1px 6px;border-radius:4px;letter-spacing:1px;font-weight:bold;display:none;animation:bleedPulse 0.8s infinite;}
+ .bleed-badge{background:#800000;color:#ff8888;font-size:0.65rem;padding:1px 6px;border-radius:4px;letter-spacing:1px;font-weight:bold;display:none;animation:bleedPulse 0.8s infinite;}
+.disarm-badge{background:#6b3b00;color:#ffcf70;animation:none;}
 @keyframes bleedPulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:0.5;transform:scale(0.95);}}
 .bullets-rack{font-size:0.8rem;text-shadow:1px 1px 0 #000;letter-spacing:3px;}
 

@@ -107,6 +107,7 @@ let fighter2 = createFighterState('Oponente', 1, OUTFIT_COLORS[1]);
 
 // Entidades Físicas Ativas
 let activeBullets = [];
+let droppedWeapons = [];
 let bloodDrops = [];
 let bulletImpactSparks = [];
 let severedHeads = [];
@@ -137,6 +138,10 @@ let isCursorInCanvas = true;
 // Spritesheet do personagem piloto (4 quadros de idle, 2x2).
 const sheriffSpriteSheet = new Image();
 sheriffSpriteSheet.src = 'assets/sprites/sheriff-idle.png';
+sheriffSpriteSheet.addEventListener('load', () => {
+  const grid = document.getElementById('charPickerGrid');
+  if (grid && grid.children.length) refreshCharacterPreviews();
+});
 
 // ==================== FÁBRICA DE LUTADORES ====================
 function createFighterState(name, charIdx, color) {
@@ -159,6 +164,7 @@ function createFighterState(name, charIdx, color) {
     kneelProgress: 0,     // Interpolação para abaixar a hitbox suavemente
     isHeadless: false,     // Decapitado (Headshot)
     isBleeding: false,     // Sangramento ativo no tronco
+    isDisarmed: false,     // Revólver perdido após tiro no braço armado
     bleedDamageAccum: 0,
     isDead: false,
 
@@ -880,12 +886,8 @@ function renderSheriffSprite(ctx, fighter, scale, dt) {
   const width = 128 * spriteScale;
   const height = 320 * spriteScale;
   const idleBob = Math.sin(fighter.spriteIdleTime * 2.4) * 1.2 * scale;
-
-  ctx.drawImage(
-    sheriffSpriteSheet,
-    0, 0, 128, 320,
-    -width / 2, -height + idleBob, width, height
-  );
+  const frame = Math.floor(fighter.spriteIdleTime / 0.2) % 4;
+  ctx.drawImage(sheriffSpriteSheet, 0, frame * 320, 128, 320, -width / 2, -height + idleBob, width, height);
 }
 
 function renderSpriteRestingArm(ctx, charData, scale, kneelY) {
@@ -1179,6 +1181,25 @@ function renderArticulatedArmedArm(ctx, charData, fighter, S, kY, isP2) {
   let rot = isP2 ? Math.PI - fighter.aimAngle : fighter.aimAngle;
   rot -= fighter.recoilAngle * 0.45;
   ctx.rotate(rot);
+
+  // Sem arma: o braço relaxa para baixo e não desenha o revólver.
+  if (fighter.isDisarmed) {
+    ctx.rotate(1.05);
+    ctx.fillStyle = charData.shirtColor;
+    ctx.beginPath();
+    ctx.roundRect(0, -8 * S, 31 * S, 16 * S, 6 * S);
+    ctx.fill();
+    ctx.strokeStyle = '#17100b';
+    ctx.lineWidth = 1.6 * S;
+    ctx.stroke();
+    ctx.fillStyle = '#d49b6a';
+    ctx.beginPath();
+    ctx.arc(32 * S, 0, 7 * S, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
 
   // Braço armado estendido na direção da mira (eixo +X).
   ctx.fillStyle = charData.shirtColor;
@@ -1586,6 +1607,11 @@ function triggerFireBullet(shooterRole) {
   const shooter = shooterRole === 'p1' ? fighter1 : fighter2;
   if (shooter.bullets <= 0 || shooter.isDead) return;
 
+  if (shooter.isDisarmed) {
+    if (shooterRole === localRole) showNotification('Você foi desarmado e não pode mais atirar!', 1800);
+    return;
+  }
+
   shooter.bullets--;
   shooter.shotsFired++;
   shooter.drumRotation += Math.PI / 3;
@@ -1635,7 +1661,7 @@ function triggerFireBullet(shooterRole) {
   }
 
   updateHUDStats();
-  checkDrawCondition();
+  checkAmmoOutcome();
 }
 
 function updateBulletsPhysics(dt) {
@@ -1678,9 +1704,11 @@ function updateBulletsPhysics(dt) {
             ? window.DuelPhysics.segmentIntersectsAabb(b.prevX, b.prevY, b.x, b.y, box)
             : checkLineAABB(b.prevX, b.prevY, b.x, b.y, box.x, box.y, box.w, box.h)) {
           hitFound = true;
-          shooterFighter.shotsHit++;
-
-          applyHitDamage(b.shooterRole, targetRole, box.part, box.damage, b.x, b.y);
+          // Somente o dono do projétil aplica o dano no multiplayer.
+          if (activeGameMode !== 'online' || b.shooterRole === localRole) {
+            shooterFighter.shotsHit++;
+            applyHitDamage(b.shooterRole, targetRole, box.part, box.damage, b.x, b.y);
+          }
 
           if (activeGameMode === 'online' && b.shooterRole === localRole) {
             sendP2PData({
@@ -1704,6 +1732,8 @@ function updateBulletsPhysics(dt) {
       activeBullets.splice(i, 1);
     }
   }
+
+  checkAmmoOutcome();
 }
 
 function checkLineAABB(x1, y1, x2, y2, rx, ry, rw, rh) {
@@ -1778,6 +1808,11 @@ function applyHitDamage(attackerRole, victimRole, part, damage, hitX, hitY) {
     audioEngine.playFleshImpact(false);
     showFloatingHitText('BRAÇO! -' + damage, hitX, hitY, '#ffcc44');
     spawnBloodFountain(hitX, hitY, 10, 0, -40);
+    if (!victim.isDisarmed) {
+      victim.isDisarmed = true;
+      spawnDroppedWeapon(victimRole, hitX, hitY);
+      showFloatingHitText('DESARMADO!', hitX, hitY - 24, '#ff8844');
+    }
   }
 
   updateHUDStats();
@@ -1785,6 +1820,34 @@ function applyHitDamage(attackerRole, victimRole, part, damage, hitX, hitY) {
   if (victim.hp <= 0 && !victim.isDead) {
     handleFighterDeath(victimRole, attackerRole, part);
   }
+}
+
+function spawnDroppedWeapon(victimRole, x, y) {
+  droppedWeapons.push({ x, y, vx: victimRole === 'p1' ? 75 : -75, vy: -190,
+    rotation: victimRole === 'p1' ? -0.35 : 0.35,
+    angularVelocity: victimRole === 'p1' ? 7 : -7, settled: false });
+}
+
+function updateDroppedWeapons(dt) {
+  const groundY = screenH * GROUND_RATIO - 4;
+  droppedWeapons.forEach(weapon => {
+    if (weapon.settled) return;
+    weapon.x += weapon.vx * dt;
+    weapon.y += weapon.vy * dt;
+    weapon.vy += 620 * dt;
+    weapon.vx *= Math.pow(0.985, dt * 60);
+    weapon.rotation += weapon.angularVelocity * dt;
+    weapon.angularVelocity *= Math.pow(0.94, dt * 60);
+    if (weapon.y >= groundY) {
+      weapon.y = groundY;
+      weapon.vy *= -0.22;
+      weapon.vx *= 0.55;
+      weapon.angularVelocity *= 0.35;
+      if (Math.abs(weapon.vy) < 28) {
+        weapon.vy = 0; weapon.vx = 0; weapon.angularVelocity = 0; weapon.settled = true;
+      }
+    }
+  });
 }
 
 function handleFighterDeath(victimRole, attackerRole, fatalPart) {
@@ -1797,14 +1860,25 @@ function handleFighterDeath(victimRole, attackerRole, fatalPart) {
   }, 1300);
 }
 
-function checkDrawCondition() {
-  if (fighter1.bullets === 0 && fighter2.bullets === 0 && !fighter1.isDead && !fighter2.isDead && activeBullets.length === 0) {
-    currentPhase = 'round_over';
-    setTimeout(() => {
-      displayDuelResult('draw', null);
-    }, 900);
+function finishAmmoOutcome(winnerRole, notifyOpponent) {
+  if (currentPhase !== 'fire') return;
+  currentPhase = 'round_over';
+  if (cpuAimTimer) clearTimeout(cpuAimTimer);
+  if (notifyOpponent && activeGameMode === 'online' && localRole === 'p1') {
+    sendP2PData({ type: 'ammo_result', winnerRole });
   }
+  setTimeout(() => displayDuelResult(winnerRole, 'ammo'), 650);
 }
+
+function checkAmmoOutcome() {
+  if (currentPhase !== 'fire' || activeBullets.length > 0 || fighter1.isDead || fighter2.isDead) return;
+  if (activeGameMode === 'online' && localRole !== 'p1') return;
+  if (fighter1.bullets === 0 && fighter2.bullets === 0) finishAmmoOutcome('draw', true);
+  else if (fighter1.bullets === 0 && fighter2.bullets > 0) finishAmmoOutcome('p2', true);
+  else if (fighter2.bullets === 0 && fighter1.bullets > 0) finishAmmoOutcome('p1', true);
+}
+
+function checkDrawCondition() { checkAmmoOutcome(); }
 
 // ==========================================================================
 // PARTÍCULAS DE SANGUE & MANCHAS NA AREIA (PERSISTENTES)
@@ -1924,6 +1998,17 @@ function renderProjectilesAndGore(ctx) {
     ctx.beginPath();
     ctx.arc(d.x, d.y, d.radius, 0, Math.PI * 2);
     ctx.fill();
+  });
+
+  // Revólveres derrubados após tiros no braço.
+  droppedWeapons.forEach(weapon => {
+    const S = Math.min(screenW, screenH) / 640;
+    ctx.save(); ctx.translate(weapon.x, weapon.y); ctx.rotate(weapon.rotation);
+    ctx.fillStyle = '#292d31'; ctx.strokeStyle = '#090909'; ctx.lineWidth = 1.5 * S;
+    ctx.fillRect(-12 * S, -3 * S, 23 * S, 6 * S); ctx.strokeRect(-12 * S, -3 * S, 23 * S, 6 * S);
+    ctx.fillStyle = '#7d858c'; ctx.fillRect(2 * S, -5 * S, 13 * S, 4 * S); ctx.strokeRect(2 * S, -5 * S, 13 * S, 4 * S);
+    ctx.fillStyle = '#3b1c0b'; ctx.fillRect(-9 * S, 2 * S, 7 * S, 11 * S); ctx.strokeRect(-9 * S, 2 * S, 7 * S, 11 * S);
+    ctx.restore();
   });
 
   // Cabeças decapitadas rolando
@@ -2060,6 +2145,8 @@ function beginNewRound() {
   fighter2.isHeadless = false;
   fighter1.isBleeding = false;
   fighter2.isBleeding = false;
+  fighter1.isDisarmed = false;
+  fighter2.isDisarmed = false;
   fighter1.bleedDamageAccum = 0;
   fighter2.bleedDamageAccum = 0;
   fighter1.isDead = false;
@@ -2072,6 +2159,7 @@ function beginNewRound() {
   fighter2.bulletHoles = [];
 
   activeBullets = [];
+  droppedWeapons = [];
   bloodDrops = [];
   severedHeads = [];
   fireInstantTimestamp = 0;
@@ -2242,7 +2330,7 @@ function triggerFogoCommand() {
 }
 
 function scheduleCPUAimAndShot() {
-  if (currentPhase !== 'fire' || fighter2.isDead) return;
+  if (currentPhase !== 'fire' || fighter2.isDead || fighter2.isDisarmed) return;
 
   const reactionTimes = [
     { base: 1400, jitter: 700 }, // Novato
@@ -2253,7 +2341,7 @@ function scheduleCPUAimAndShot() {
   const delay = cfg.base + Math.random() * cfg.jitter;
 
   cpuAimTimer = setTimeout(() => {
-    if (currentPhase !== 'fire' || fighter2.isDead || fighter2.bullets <= 0) return;
+    if (currentPhase !== 'fire' || fighter2.isDead || fighter2.isDisarmed || fighter2.bullets <= 0) return;
 
     const p1Center = getFighterCoords('p1');
     const targetY = fighter1.isKneeling ? p1Center.y + 40 : p1Center.y - (cpuDifficulty === 2 ? 110 : 35);
@@ -2293,12 +2381,15 @@ function displayDuelResult(winnerRole, fatalPart) {
     banner.style.color = isPlayerWin ? '#ffcc44' : '#cc2200';
     sub.textContent = fatalPart === 'forfeit'
       ? `${winner.name} venceu por abandono do oponente!`
-      : `${winner.name} foi o mais rápido no gatilho!`;
+      : fatalPart === 'ammo'
+        ? `${winner.name} venceu: o adversário ficou sem munição!`
+        : `${winner.name} foi o mais rápido no gatilho!`;
     winner.score++;
 
     recordWinInLeaderboard(winner.name);
 
     const hitDesc = fatalPart === 'forfeit' ? 'VITÓRIA POR W.O.' :
+                    fatalPart === 'ammo' ? 'VITÓRIA POR ESGOTAMENTO DE MUNIÇÃO' :
                     fatalPart === 'head' ? 'TIRO CERTEIRO NA CABEÇA (HEADSHOT!)' :
                     fatalPart === 'torso' ? 'MORTALMENTE FERIDO NO TRONCO' :
                     fatalPart === 'legs' ? 'SANGROU ATÉ A MORTE PELAS PERNAS' : 'GOLPE FATAL';
@@ -2310,6 +2401,9 @@ function displayDuelResult(winnerRole, fatalPart) {
     details.innerHTML = fatalPart === 'forfeit' ? `
       <span style="color:#ff8800;font-weight:bold;">${hitDesc}</span><br>
       O oponente permaneceu fora do tambor por mais de 10 segundos.
+    ` : fatalPart === 'ammo' ? `
+      <span style="color:#ff8800;font-weight:bold;">${hitDesc}</span><br>
+      O duelo terminou após a resolução de todos os disparos em voo.
     ` : `
       <span style="color:#ff8800;font-weight:bold;">${hitDesc}</span><br>
       ⚡ Tempo de Saque Fatal: <b style="color:#ffe099;">${rtText}</b><br>
@@ -2428,6 +2522,8 @@ function updateHUDStats() {
 
   document.getElementById('hudP1BleedBadge').style.display = fighter1.isBleeding ? 'inline-block' : 'none';
   document.getElementById('hudP2BleedBadge').style.display = fighter2.isBleeding ? 'inline-block' : 'none';
+  document.getElementById('hudP1DisarmBadge').style.display = fighter1.isDisarmed ? 'inline-block' : 'none';
+  document.getElementById('hudP2DisarmBadge').style.display = fighter2.isDisarmed ? 'inline-block' : 'none';
 
   const formatBullets = n => '●'.repeat(n) + '○'.repeat(6 - n);
   document.getElementById('hudP1BulletsRack').textContent = formatBullets(fighter1.bullets);
@@ -2681,6 +2777,10 @@ function handleIncomingP2PData(msg) {
       applyHitDamage(msg.attacker, localRole, msg.part, msg.damage, msg.x, msg.y);
       break;
 
+    case 'ammo_result':
+      finishAmmoOutcome(msg.winnerRole, false);
+      break;
+
     case 'rematch_ready':
       const remOpp = localRole === 'p1' ? fighter2 : fighter1;
       remOpp.readyForRematch = true;
@@ -2821,8 +2921,9 @@ function gameAnimationLoop(timestamp) {
     // 1. Cenário Coeso
     renderGunbloodEnvironment(mainCtx, dt);
 
-    // 2. Física de Balas e Sangue
+    // 2. Física de balas, armas derrubadas e sangue
     updateBulletsPhysics(dt);
+    updateDroppedWeapons(dt);
     updateBloodParticles(dt);
 
     // 3. Os 2 Pistoleiros Articulados
@@ -2994,6 +3095,13 @@ function renderCharacterMiniPreview(canvasEl, charIdx, color) {
   };
 
   const charData = GUNSLINGERS[charIdx];
+  if (charData.id === 'sheriff' && color === OUTFIT_COLORS[0] && sheriffSpriteSheet.complete && sheriffSpriteSheet.naturalWidth > 0) {
+    renderSheriffSprite(pctx, mockFighter, 0.36 / 0.9, 0);
+    renderSpriteRestingArm(pctx, charData, 0.36, 0);
+    renderArticulatedArmedArm(pctx, charData, mockFighter, 0.36, 0, false);
+    pctx.restore();
+    return;
+  }
   renderArticulatedLegs(pctx, charData, mockFighter, S, 0);
   renderArticulatedTorso(pctx, charData, mockFighter, S, 0);
   renderArticulatedArmedArm(pctx, charData, mockFighter, S, 0, false);
