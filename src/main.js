@@ -1704,21 +1704,22 @@ function updateBulletsPhysics(dt) {
             ? window.DuelPhysics.segmentIntersectsAabb(b.prevX, b.prevY, b.x, b.y, box)
             : checkLineAABB(b.prevX, b.prevY, b.x, b.y, box.x, box.y, box.w, box.h)) {
           hitFound = true;
-          // Somente o dono do projétil aplica o dano no multiplayer.
-          if (activeGameMode !== 'online' || b.shooterRole === localRole) {
+          // O host (P1) é a autoridade de colisão/dano no multiplayer.
+          // O convidado simula os projéteis visualmente e recebe o resultado do host.
+          if (activeGameMode !== 'online' || localRole === 'p1') {
             shooterFighter.shotsHit++;
             applyHitDamage(b.shooterRole, targetRole, box.part, box.damage, b.x, b.y);
-          }
-
-          if (activeGameMode === 'online' && b.shooterRole === localRole) {
-            sendP2PData({
-              type: 'hit_confirm',
-              part: box.part,
-              damage: box.damage,
-              x: b.x,
-              y: b.y,
-              attacker: b.shooterRole
-            });
+            if (activeGameMode === 'online') {
+              sendP2PData({
+                type: 'hit_confirm',
+                part: box.part,
+                damage: box.damage,
+                x: b.x,
+                y: b.y,
+                attacker: b.shooterRole,
+                victim: targetRole
+              });
+            }
           }
 
           activeBullets.splice(i, 1);
@@ -2773,9 +2774,13 @@ function handleIncomingP2PData(msg) {
       checkDrawCondition();
       break;
 
-    case 'hit_confirm':
-      applyHitDamage(msg.attacker, localRole, msg.part, msg.damage, msg.x, msg.y);
+    case 'hit_confirm': {
+      const victimRole = msg.victim || localRole;
+      const attacker = msg.attacker === 'p1' ? fighter1 : fighter2;
+      attacker.shotsHit++;
+      applyHitDamage(msg.attacker, victimRole, msg.part, msg.damage, msg.x, msg.y);
       break;
+    }
 
     case 'ammo_result':
       finishAmmoOutcome(msg.winnerRole, false);
