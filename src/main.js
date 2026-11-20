@@ -118,6 +118,8 @@ let tumbleweedsList = [];
 // Temporizadores & Animação
 let countdownTicker = null;
 let countdownCurrentSec = 3;
+let countdownEverStarted = false;
+let forfeitTimers = { p1: null, p2: null };
 let fireInstantTimestamp = 0;
 let cpuAimTimer = null;
 let animationFrameId = null;
@@ -1941,6 +1943,9 @@ function renderTactileDrum(canvasEl, bullets, angle, highlightColor) {
 // ==========================================================================
 
 function beginNewRound() {
+  clearForfeitTimers();
+  if (countdownTicker) clearTimeout(countdownTicker);
+  countdownEverStarted = false;
   currentPhase = 'holding';
   fighter1.hp = 100;
   fighter2.hp = 100;
@@ -1985,13 +1990,17 @@ function beginNewRound() {
   document.getElementById('resultModal').classList.remove('active');
 
   const drumL = document.getElementById('drumLeftP1');
+  const drumR = document.getElementById('drumRightP2');
   drumL.className = 'drum-interactive';
+  drumR.className = 'drum-interactive';
   drumL.style.display = 'flex';
+  drumR.style.display = 'flex';
 
   updateHUDStats();
 
   if (activeGameMode === 'cpu') {
     fighter2.holdingDrum = true;
+    drumR.classList.add('holding');
   }
 
   showNotification('Mantenha o cursor sobre o tambor!', 3000);
@@ -1999,47 +2008,95 @@ function beginNewRound() {
 
 function handleDrumHoverState(isHolding) {
   if (currentPhase !== 'holding' && currentPhase !== 'countdown') return;
-  const fighter = localRole === 'p1' ? fighter1 : fighter2;
-  const drumEl = document.getElementById('drumLeftP1');
+  const role = localRole;
+  const fighter = role === 'p1' ? fighter1 : fighter2;
+  const drumEl = document.getElementById(role === 'p1' ? 'drumLeftP1' : 'drumRightP2');
 
   if (fighter.holdingDrum !== isHolding) {
     fighter.holdingDrum = isHolding;
     drumEl.classList.toggle('holding', isHolding);
-
-    if (isHolding) {
-      audioEngine.playDrumSpin();
-    }
+    if (isHolding) audioEngine.playDrumSpin();
 
     if (activeGameMode === 'online') {
       sendP2PData({ type: 'drum_state', isHolding: isHolding });
+      if (localRole === 'p1') updateForfeitTimer(role, isHolding);
     }
 
     checkCountdownStartCondition();
-
     if (!isHolding && currentPhase === 'countdown') {
-      if (countdownTicker) clearTimeout(countdownTicker);
-      currentPhase = 'holding';
-      document.getElementById('countdownBigNum').textContent = '';
-      document.getElementById('warningNotice').textContent = '⚠ VOCÊ TIROU A MÃO DO TAMBOR!';
-      setTimeout(() => {
-        if (currentPhase === 'holding') {
-          document.getElementById('warningNotice').textContent = '';
-        }
-      }, 1800);
+      cancelCountdownSequence('⚠ VOCÊ TIROU A MÃO DO TAMBOR!');
     }
   }
 }
 
-function checkCountdownStartCondition() {
-  if (currentPhase === 'holding' && fighter1.holdingDrum && fighter2.holdingDrum) {
-    startCountdownSequence();
-  }
+function clearForfeitTimers() {
+  Object.keys(forfeitTimers).forEach(role => {
+    if (forfeitTimers[role]) clearTimeout(forfeitTimers[role]);
+    forfeitTimers[role] = null;
+  });
 }
 
-function startCountdownSequence() {
+function updateForfeitTimer(role, isHolding) {
+  if (activeGameMode !== 'online' || localRole !== 'p1' || !countdownEverStarted) return;
+  if (currentPhase !== 'holding' && currentPhase !== 'countdown') return;
+  if (forfeitTimers[role]) clearTimeout(forfeitTimers[role]);
+  forfeitTimers[role] = null;
+  if (isHolding) return;
+
+  forfeitTimers[role] = setTimeout(() => {
+    forfeitTimers[role] = null;
+    const fighter = role === 'p1' ? fighter1 : fighter2;
+    if (!fighter.holdingDrum && countdownEverStarted &&
+        (currentPhase === 'holding' || currentPhase === 'countdown')) {
+      finishForfeit(role === 'p1' ? 'p2' : 'p1', true);
+    }
+  }, 10000);
+}
+
+function finishForfeit(winnerRole, notifyOpponent) {
+  if (currentPhase === 'round_over' || currentPhase === 'fire') return;
+  if (countdownTicker) clearTimeout(countdownTicker);
+  countdownTicker = null;
+  clearForfeitTimers();
+  currentPhase = 'round_over';
+  if (notifyOpponent && activeGameMode === 'online' && localRole === 'p1') {
+    sendP2PData({ type: 'forfeit_result', winnerRole: winnerRole });
+  }
+  displayDuelResult(winnerRole, 'forfeit');
+}
+
+function cancelCountdownSequence(message) {
+  if (currentPhase !== 'countdown') return;
+  if (countdownTicker) clearTimeout(countdownTicker);
+  countdownTicker = null;
+  currentPhase = 'holding';
+  document.getElementById('countdownBigNum').textContent = '';
+  document.getElementById('warningNotice').textContent = message;
+  if (activeGameMode === 'online' && localRole === 'p1') {
+    sendP2PData({ type: 'countdown_cancel' });
+  }
+  setTimeout(() => {
+    if (currentPhase === 'holding') document.getElementById('warningNotice').textContent = '';
+  }, 1800);
+}
+
+function checkCountdownStartCondition() {
+  if (currentPhase !== 'holding' || !fighter1.holdingDrum || !fighter2.holdingDrum) return;
+  if (activeGameMode === 'online' && localRole !== 'p1') return;
+  startCountdownSequence();
+}
+
+function startCountdownSequence(fromHost = false) {
+  if (currentPhase !== 'holding') return;
+  if (activeGameMode === 'online' && localRole !== 'p1' && !fromHost) return;
+  if (!fighter1.holdingDrum || !fighter2.holdingDrum) return;
   currentPhase = 'countdown';
+  countdownEverStarted = true;
   countdownCurrentSec = 3;
   document.getElementById('warningNotice').textContent = '';
+  if (activeGameMode === 'online' && localRole === 'p1' && !fromHost) {
+    sendP2PData({ type: 'countdown_start' });
+  }
   tickCountdownStep();
 }
 
@@ -2073,6 +2130,7 @@ function tickCountdownStep() {
 }
 
 function triggerFogoCommand() {
+  clearForfeitTimers();
   currentPhase = 'fire';
   fireInstantTimestamp = performance.now();
 
@@ -2145,7 +2203,8 @@ function displayDuelResult(winnerRole, fatalPart) {
 
     recordWinInLeaderboard(winner.name);
 
-    const hitDesc = fatalPart === 'head' ? 'TIRO CERTEIRO NA CABEÇA (HEADSHOT!)' :
+    const hitDesc = fatalPart === 'forfeit' ? 'VITÓRIA POR W.O.' :
+                    fatalPart === 'head' ? 'TIRO CERTEIRO NA CABEÇA (HEADSHOT!)' :
                     fatalPart === 'torso' ? 'MORTALMENTE FERIDO NO TRONCO' :
                     fatalPart === 'legs' ? 'SANGROU ATÉ A MORTE PELAS PERNAS' : 'GOLPE FATAL';
 
@@ -2153,7 +2212,10 @@ function displayDuelResult(winnerRole, fatalPart) {
     const p1Acc = fighter1.shotsFired > 0 ? Math.round((fighter1.shotsHit / fighter1.shotsFired) * 100) : 0;
     const p2Acc = fighter2.shotsFired > 0 ? Math.round((fighter2.shotsHit / fighter2.shotsFired) * 100) : 0;
 
-    details.innerHTML = `
+    details.innerHTML = fatalPart === 'forfeit' ? `
+      <span style="color:#ff8800;font-weight:bold;">${hitDesc}</span><br>
+      O oponente permaneceu fora do tambor por mais de 10 segundos.
+    ` : `
       <span style="color:#ff8800;font-weight:bold;">${hitDesc}</span><br>
       ⚡ Tempo de Saque Fatal: <b style="color:#ffe099;">${rtText}</b><br>
       🎯 Precisão: ${fighter1.name} <b>${p1Acc}%</b> | ${fighter2.name} <b>${p2Acc}%</b><br>
@@ -2456,15 +2518,36 @@ function handleIncomingP2PData(msg) {
       aimFighter.aimAngle = msg.angle;
       break;
 
-    case 'drum_state':
-      const drumFighter = localRole === 'p1' ? fighter2 : fighter1;
-      drumFighter.holdingDrum = msg.isHolding;
+    case 'drum_state': {
+      const remoteRole = localRole === 'p1' ? 'p2' : 'p1';
+      const drumFighter = remoteRole === 'p1' ? fighter1 : fighter2;
+      const remoteDrum = document.getElementById(remoteRole === 'p1' ? 'drumLeftP1' : 'drumRightP2');
+      drumFighter.holdingDrum = !!msg.isHolding;
+      remoteDrum.classList.toggle('holding', !!msg.isHolding);
+      if (localRole === 'p1') updateForfeitTimer(remoteRole, !!msg.isHolding);
       checkCountdownStartCondition();
       if (!msg.isHolding && currentPhase === 'countdown') {
+        cancelCountdownSequence('⚠ OPONENTE SOLTOU O TAMBOR!');
+      }
+      break;
+    }
+
+    case 'countdown_start':
+      if (localRole !== 'p1') startCountdownSequence(true);
+      break;
+
+    case 'countdown_cancel':
+      if (currentPhase === 'countdown') {
+        if (countdownTicker) clearTimeout(countdownTicker);
+        countdownTicker = null;
         currentPhase = 'holding';
         document.getElementById('countdownBigNum').textContent = '';
         document.getElementById('warningNotice').textContent = '⚠ OPONENTE SOLTOU O TAMBOR!';
       }
+      break;
+
+    case 'forfeit_result':
+      finishForfeit(msg.winnerRole, false);
       break;
 
     case 'bullet_spawn':
@@ -2580,6 +2663,12 @@ document.addEventListener('mousemove', e => {
   updateAimingAngle(e.clientX, e.clientY);
 });
 
+window.addEventListener('blur', () => {
+  if (currentPhase === 'holding' || currentPhase === 'countdown') {
+    handleDrumHoverState(false);
+  }
+});
+
 document.addEventListener('click', e => {
   audioEngine.resume();
   if (currentPhase === 'fire') {
@@ -2603,7 +2692,7 @@ document.addEventListener('touchstart', e => {
 }, { passive: true });
 
 function checkDrumHoldingBounds(mx, my) {
-  const drumEl = document.getElementById('drumLeftP1');
+  const drumEl = document.getElementById(localRole === 'p1' ? 'drumLeftP1' : 'drumRightP2');
   if (!drumEl) return;
   const rect = drumEl.getBoundingClientRect();
   const isOver = (mx >= rect.left && mx <= rect.right && my >= rect.top && my <= rect.bottom);
@@ -2635,7 +2724,9 @@ function gameAnimationLoop(timestamp) {
 
     // 5. Tambor no Canto Inferior
     const drumCanvasL = document.getElementById('drumCanvasLeft');
+    const drumCanvasR = document.getElementById('drumCanvasRight');
     renderTactileDrum(drumCanvasL, fighter1.bullets, fighter1.drumRotation, '#e65c00');
+    renderTactileDrum(drumCanvasR, fighter2.bullets, fighter2.drumRotation, '#3b82f6');
 
     // 6. Mira Reticular (Crosshair) Desenhada no Canvas!
     renderGunbloodCrosshair(mainCtx, cursorAimX, cursorAimY);
@@ -2700,6 +2791,7 @@ function exitToMainMenu() {
   p2pDataChannel = null;
   if (cpuAimTimer) clearTimeout(cpuAimTimer);
   if (countdownTicker) clearTimeout(countdownTicker);
+  clearForfeitTimers();
 
   switchToScreen('menuScreen');
   renderLeaderboardTable();
