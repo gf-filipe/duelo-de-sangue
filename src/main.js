@@ -1255,7 +1255,7 @@ function renderSheriffSpriteArm(ctx, fighter, scale, isP2) {
   sleeve.bezierCurveTo(12 * scale, -13 * scale, 27 * scale, -10 * scale, 40 * scale, -5 * scale + armBob);
   sleeve.bezierCurveTo(44 * scale, -2 * scale + armBob, 44 * scale, 6 * scale + armBob, 39 * scale, 9 * scale + armBob);
   sleeve.bezierCurveTo(25 * scale, 12 * scale, 11 * scale, 8 * scale, 0, 8 * scale);
-  strokeSleeve(sleeve, 1 * scale);
+  strokeSleeve(sleeve, 15 * scale);
 
   // Punho/camisa e mão fechada ao redor do cabo.
   ctx.save();
