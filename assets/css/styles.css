@@ -111,7 +111,7 @@ canvas{display:block;}
 /* Tambor Tátil */
 .drum-interactive{position:fixed;bottom:25px;width:110px;height:110px;z-index:45;pointer-events:all;border-radius:50%;border:3px solid rgba(212,155,67,0.4);background:rgba(0,0,0,0.5);display:flex;flex-direction:column;align-items:center;justify-content:center;transition:border-color 0.15s,box-shadow 0.15s;cursor:crosshair;}
 #drumLeftP1{left:clamp(15px,3.5vw,40px);}
-#drumRightP2{right:clamp(15px,3.5vw,40px);display:none;}
+#drumRightP2{right:clamp(15px,3.5vw,40px);}
 .drum-interactive canvas{width:96px;height:96px;pointer-events:none;}
 .drum-caption{position:absolute;bottom:-24px;font-size:0.68rem;color:#ffcc44;white-space:nowrap;text-shadow:1px 1px 0 #000;font-weight:bold;letter-spacing:1px;pointer-events:none;}
 .drum-interactive.holding{border-color:#00ff55;background:rgba(0,80,25,0.45);box-shadow:0 0 25px rgba(0,255,85,0.5);}
