@@ -134,6 +134,10 @@ let cursorAimX = screenW / 2;
 let cursorAimY = screenH / 2;
 let isCursorInCanvas = true;
 
+// Spritesheet do personagem piloto (4 quadros de idle, 2x2).
+const sheriffSpriteSheet = new Image();
+sheriffSpriteSheet.src = 'assets/sprites/sheriff-idle.png';
+
 // ==================== FÁBRICA DE LUTADORES ====================
 function createFighterState(name, charIdx, color) {
   return {
@@ -862,6 +866,42 @@ function getFighterCoords(role) {
   return { x, y: groundY };
 }
 
+function renderSheriffSprite(ctx, fighter, scale) {
+  fighter.spriteIdleTime = (fighter.spriteIdleTime || 0) + 0.016;
+  const frameSequence = [0, 1, 0, 3, 0, 2];
+  const frameIndex = frameSequence[Math.floor(fighter.spriteIdleTime / 0.42) % frameSequence.length];
+  const sourceX = (frameIndex % 2) * 128;
+  const sourceY = Math.floor(frameIndex / 2) * 320;
+  const spriteScale = 0.9 * scale;
+  const width = 128 * spriteScale;
+  const height = 320 * spriteScale;
+
+  ctx.drawImage(
+    sheriffSpriteSheet,
+    sourceX, sourceY, 128, 320,
+    -width / 2, -height, width, height
+  );
+}
+
+function renderSpriteRestingArm(ctx, charData, scale, kneelY) {
+  ctx.save();
+  ctx.translate(-24 * scale, -65 * scale + kneelY);
+  ctx.rotate(-0.24);
+  ctx.fillStyle = charData.shirtColor;
+  ctx.beginPath();
+  ctx.roundRect(-7 * scale, 0, 14 * scale, 39 * scale, 6 * scale);
+  ctx.fill();
+  ctx.strokeStyle = '#17100b';
+  ctx.lineWidth = 1.5 * scale;
+  ctx.stroke();
+  ctx.fillStyle = '#d49b6a';
+  ctx.beginPath();
+  ctx.arc(0, 40 * scale, 6.5 * scale, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
 function renderGunbloodCharacter(ctx, fighter, role, dt, customScale = null) {
   const coords = getFighterCoords(role);
   const isP2 = role === 'p2';
@@ -925,21 +965,25 @@ function renderGunbloodCharacter(ctx, fighter, role, dt, customScale = null) {
     ctx.fill();
   }
 
-  // 2. Pernas (Postura Clássica de Saque Gunblood ou Ajoelhado!)
-  renderArticulatedLegs(ctx, charData, fighter, scale, kneelY);
+  // O Xerife usa o sprite piloto; personagens alternativos e estados de dano
+  // continuam usando o renderer procedural até receberem seus próprios sprites.
+  const useSheriffSprite = charData.id === 'sheriff' &&
+    !fighter.isHeadless && !fighter.isKneeling &&
+    (!fighter.customColor || fighter.customColor === OUTFIT_COLORS[0]) &&
+    sheriffSpriteSheet.complete && sheriffSpriteSheet.naturalWidth > 0;
 
-  // 3. Tronco, Colete, Cinto e Coldre
-  renderArticulatedTorso(ctx, charData, fighter, scale, kneelY);
-
-  // 4. Braço Armado Articulado com Revólver Prateado
-  renderArticulatedArmedArm(ctx, charData, fighter, scale, kneelY, isP2);
-
-  // 5. Cabeça Articulada (ou Toco com Jato Arterial se Decapitado!)
-  if (!fighter.isHeadless) {
-    renderArticulatedHead(ctx, charData, fighter, scale, kneelY);
+  if (useSheriffSprite) {
+    renderSheriffSprite(ctx, fighter, scale);
+    renderSpriteRestingArm(ctx, charData, scale, kneelY);
   } else {
-    renderNeckStumpGeyser(ctx, scale, kneelY);
+    renderArticulatedLegs(ctx, charData, fighter, scale, kneelY);
+    renderArticulatedTorso(ctx, charData, fighter, scale, kneelY);
+    if (!fighter.isHeadless) renderArticulatedHead(ctx, charData, fighter, scale, kneelY);
+    else renderNeckStumpGeyser(ctx, scale, kneelY);
   }
+
+  // Braço armado permanece procedural e acompanha o ângulo real da mira.
+  renderArticulatedArmedArm(ctx, charData, fighter, scale, kneelY, isP2);
 
   ctx.restore();
 }
@@ -1128,70 +1172,60 @@ function renderArticulatedArmedArm(ctx, charData, fighter, S, kY, isP2) {
   const shoulderY = (-52 * S) + kY;
   ctx.translate(shoulderX, shoulderY);
 
-  // Ângulo de mira com coice suave
-  let rot = fighter.aimAngle;
-  if (isP2) rot = -rot;
+  // Em P2 o contexto já está espelhado: convertemos o ângulo mundial
+  // para o espaço local para que o cano aponte exatamente ao cursor.
+  let rot = isP2 ? Math.PI - fighter.aimAngle : fighter.aimAngle;
   rot -= fighter.recoilAngle * 0.45;
   ctx.rotate(rot);
 
-  // Braço superior
+  // Braço armado estendido na direção da mira (eixo +X).
   ctx.fillStyle = charData.shirtColor;
   ctx.beginPath();
-  ctx.roundRect(-8 * S, -8 * S, 16 * S, 40 * S, 5 * S);
+  ctx.roundRect(0, -8 * S, 39 * S, 16 * S, 6 * S);
   ctx.fill();
-  ctx.strokeStyle = '#111';
+  ctx.strokeStyle = '#17100b';
   ctx.lineWidth = 1.6 * S;
   ctx.stroke();
 
-  // Mão
+  // Punho e mão.
   ctx.fillStyle = '#d49b6a';
   ctx.beginPath();
-  ctx.arc(0, 40 * S, 7 * S, 0, Math.PI * 2);
+  ctx.arc(40 * S, 0, 7 * S, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
 
-  // Revólver Prateado Longo de Gunblood (Silver Peacemaker)
+  // Revólver alinhado ao eixo da mira; o cano termina a 95 unidades do ombro.
   ctx.save();
-  ctx.translate(2 * S, 40 * S);
-  ctx.rotate(Math.PI / 2); // Alinha com o braço
+  ctx.translate(40 * S, 0);
 
-  // Coronha
   ctx.fillStyle = '#261205';
   ctx.beginPath();
-  ctx.roundRect(-5 * S, 4 * S, 9 * S, 16 * S, [2 * S, 2 * S, 5 * S, 5 * S]);
+  ctx.roundRect(-3 * S, 1 * S, 9 * S, 17 * S, [2 * S, 2 * S, 5 * S, 5 * S]);
   ctx.fill();
   ctx.strokeStyle = '#111';
   ctx.lineWidth = 1.2 * S;
   ctx.stroke();
 
-  // Armação e Tambor Prateado
-  const metalGrad = ctx.createLinearGradient(0, -6 * S, 30 * S, 6 * S);
-  metalGrad.addColorStop(0, '#ffffff');
-  metalGrad.addColorStop(0.5, '#cccccc');
-  metalGrad.addColorStop(1, '#777777');
+  const metalGrad = ctx.createLinearGradient(0, -7 * S, 52 * S, 7 * S);
+  metalGrad.addColorStop(0, '#f7f7f7');
+  metalGrad.addColorStop(0.5, '#bfc4c9');
+  metalGrad.addColorStop(1, '#737980');
   ctx.fillStyle = metalGrad;
-  ctx.fillRect(0, -5 * S, 16 * S, 18 * S);
-  ctx.strokeRect(0, -5 * S, 16 * S, 18 * S);
+  ctx.fillRect(0, -6 * S, 17 * S, 13 * S);
+  ctx.strokeRect(0, -6 * S, 17 * S, 13 * S);
 
-  // Tambor Flautado
-  ctx.fillStyle = '#999999';
-  ctx.fillRect(4 * S, -3 * S, 14 * S, 14 * S);
-  ctx.strokeRect(4 * S, -3 * S, 14 * S, 14 * S);
+  ctx.fillStyle = '#8e969d';
+  ctx.fillRect(5 * S, -4 * S, 12 * S, 9 * S);
+  ctx.strokeRect(5 * S, -4 * S, 12 * S, 9 * S);
 
-  // Cano Prateado Longo
   ctx.fillStyle = metalGrad;
-  ctx.fillRect(18 * S, 0, 36 * S, 7 * S);
-  ctx.strokeRect(18 * S, 0, 36 * S, 7 * S);
+  ctx.fillRect(17 * S, -3 * S, 38 * S, 6 * S);
+  ctx.strokeRect(17 * S, -3 * S, 38 * S, 6 * S);
 
-  // Mira da ponta do cano
   ctx.fillStyle = '#333';
-  ctx.fillRect(52 * S, -3 * S, 3 * S, 4 * S);
+  ctx.fillRect(52 * S, -5 * S, 3 * S, 4 * S);
 
-  // Clarão de Tiro (Muzzle Flash)
-  if (fighter.recoilAngle > 0.15) {
-    drawMuzzleFlash(ctx, 56 * S, 3.5 * S, S);
-  }
-
+  if (fighter.recoilAngle > 0.15) drawMuzzleFlash(ctx, 56 * S, 0, S);
   ctx.restore();
   ctx.restore();
 }
@@ -1576,8 +1610,12 @@ function updateBulletsPhysics(dt) {
     b.trail.push({ x: b.x, y: b.y, size: 3.5 });
     if (b.trail.length > 8) b.trail.shift();
 
-    // Colisão com o chão
-    if (b.y >= groundY + 12) {
+    // A faixa abaixo da linha dos prédios é jogável: permite acertar pernas.
+    // O projétil só encontra o limite físico no rodapé da tela.
+    const groundImpact = window.DuelPhysics
+      ? window.DuelPhysics.segmentCrossesHorizontalPlane(b.prevX, b.prevY, b.x, b.y, screenH - 8)
+      : (b.y >= screenH - 8 ? { x: b.x, y: screenH - 8 } : null);
+    if (groundImpact) {
       audioEngine.playRicochetSound();
       activeBullets.splice(i, 1);
       continue;
@@ -1593,7 +1631,9 @@ function updateBulletsPhysics(dt) {
       let hitFound = false;
 
       for (const box of hitboxes) {
-        if (checkLineAABB(b.prevX, b.prevY, b.x, b.y, box.x, box.y, box.w, box.h)) {
+        if (window.DuelPhysics
+            ? window.DuelPhysics.segmentIntersectsAabb(b.prevX, b.prevY, b.x, b.y, box)
+            : checkLineAABB(b.prevX, b.prevY, b.x, b.y, box.x, box.y, box.w, box.h)) {
           hitFound = true;
           shooterFighter.shotsHit++;
 
@@ -1624,13 +1664,23 @@ function updateBulletsPhysics(dt) {
 }
 
 function checkLineAABB(x1, y1, x2, y2, rx, ry, rw, rh) {
-  if ((x1 >= rx && x1 <= rx + rw && y1 >= ry && y1 <= ry + rh) ||
-      (x2 >= rx && x2 <= rx + rw && y2 >= ry && y2 <= ry + rh)) {
-    return true;
+  if (window.DuelPhysics) {
+    return window.DuelPhysics.segmentIntersectsAabb(x1, y1, x2, y2, { x: rx, y: ry, w: rw, h: rh });
   }
-  const minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
-  const minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
-  if (maxX < rx || minX > rx + rw || maxY < ry || minY > ry + rh) return false;
+  const dx = x2 - x1, dy = y2 - y1;
+  let tMin = 0, tMax = 1;
+  const p = [-dx, dx, -dy, dy];
+  const q = [x1 - rx, rx + rw - x1, y1 - ry, ry + rh - y1];
+  for (let i = 0; i < 4; i++) {
+    if (Math.abs(p[i]) < 1e-9) {
+      if (q[i] < 0) return false;
+      continue;
+    }
+    const t = q[i] / p[i];
+    if (p[i] < 0) tMin = Math.max(tMin, t);
+    else tMax = Math.min(tMax, t);
+    if (tMin > tMax) return false;
+  }
   return true;
 }
 
@@ -2306,11 +2356,22 @@ function resetLeaderboard() {
 
 function renderHistoryDrawer() {
   const list = document.getElementById('matchHistoryList');
+  if (!duelMatchHistory.length) {
+    list.innerHTML = '<div class="hist-empty">Nenhum duelo concluído nesta partida.</div>';
+    return;
+  }
   list.innerHTML = duelMatchHistory.map(h => `
     <div class="hist-row">
-      R${h.round}: <b>${h.winner}</b> ${h.rt ? `(${h.rt}ms)` : ''} ${h.part === 'head' ? '💀' : '🔫'}
+      R${h.round}: <b>${h.winner}</b> ${h.rt ? `(${h.rt}ms)` : ''} ${h.part === 'head' ? '💀' : h.part === 'forfeit' ? '🏳' : '🔫'}
     </div>
   `).join('');
+}
+
+function toggleMatchHistory() {
+  const box = document.getElementById('matchHistoryBox');
+  const button = document.getElementById('matchHistoryToggle');
+  const collapsed = box.classList.toggle('collapsed');
+  button.setAttribute('aria-expanded', String(!collapsed));
 }
 
 function updateHUDStats() {
@@ -2631,7 +2692,11 @@ function chooseCpuDiff(d) {
 
 function launchDuelArena() {
   switchToScreen('gameScreen');
-  document.getElementById('matchHistoryBox').style.display = 'block';
+  const historyBox = document.getElementById('matchHistoryBox');
+  historyBox.style.display = 'block';
+  historyBox.classList.remove('collapsed');
+  document.getElementById('matchHistoryToggle').setAttribute('aria-expanded', 'true');
+  renderHistoryDrawer();
   beginNewRound();
 }
 

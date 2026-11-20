@@ -161,7 +161,7 @@
   <!-- PAINEL DE HISTÓRICO -->
   <div id="matchHistoryBox">
     <div class="hist-card">
-      <div class="hist-title">⏱ Histórico de Duelos</div>
+      <button type="button" class="hist-title" id="matchHistoryToggle" aria-expanded="true" onclick="toggleMatchHistory()">⏱ Histórico de Duelos <span aria-hidden="true">▾</span></button>
       <div id="matchHistoryList"></div>
     </div>
   </div>
@@ -183,6 +183,7 @@
 <div id="toastNotification"></div>
 <button class="top-action-btn" id="soundToggleBtn" onclick="toggleAudioMute()">🔊 Som</button>
 
+<script src="src/physics.js"></script>
 <script src="src/main.js"></script>
 </body>
 </html>
