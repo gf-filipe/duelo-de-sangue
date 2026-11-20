@@ -881,32 +881,14 @@ function usesSheriffSprite(fighter) {
 }
 
 function renderSheriffSprite(ctx, fighter, scale, dt) {
+  // O arquivo atual contém apenas UM quadro de 128x320.
+  // Não avançar o sourceY: quadros inexistentes causavam o desaparecimento intermitente.
   fighter.spriteIdleTime = (fighter.spriteIdleTime || 0) + dt;
   const spriteScale = 0.9 * scale;
   const width = 128 * spriteScale;
   const height = 320 * spriteScale;
   const idleBob = Math.sin(fighter.spriteIdleTime * 2.4) * 1.2 * scale;
-  const frame = Math.floor(fighter.spriteIdleTime / 0.2) % 4;
-  ctx.drawImage(sheriffSpriteSheet, 0, frame * 320, 128, 320, -width / 2, -height + idleBob, width, height);
-}
-
-function renderSpriteRestingArm(ctx, charData, scale, kneelY) {
-  ctx.save();
-  ctx.translate(-24 * scale, -185 * scale + kneelY);
-  ctx.rotate(-0.24);
-  ctx.fillStyle = charData.shirtColor;
-  ctx.beginPath();
-  ctx.roundRect(-7 * scale, 0, 14 * scale, 39 * scale, 6 * scale);
-  ctx.fill();
-  ctx.strokeStyle = '#17100b';
-  ctx.lineWidth = 1.5 * scale;
-  ctx.stroke();
-  ctx.fillStyle = '#d49b6a';
-  ctx.beginPath();
-  ctx.arc(0, 40 * scale, 6.5 * scale, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-  ctx.restore();
+  ctx.drawImage(sheriffSpriteSheet, 0, 0, 128, 320, -width / 2, -height + idleBob, width, height);
 }
 
 function renderGunbloodCharacter(ctx, fighter, role, dt, customScale = null) {
@@ -978,7 +960,6 @@ function renderGunbloodCharacter(ctx, fighter, role, dt, customScale = null) {
 
   if (useSheriffSprite) {
     renderSheriffSprite(ctx, fighter, scale, dt);
-    renderSpriteRestingArm(ctx, charData, scale, kneelY);
   } else {
     renderArticulatedLegs(ctx, charData, fighter, scale, kneelY);
     renderArticulatedTorso(ctx, charData, fighter, scale, kneelY);
@@ -1173,7 +1154,7 @@ function renderArticulatedTorso(ctx, charData, fighter, S, kY) {
 function renderArticulatedArmedArm(ctx, charData, fighter, S, kY, isP2) {
   ctx.save();
   const shoulderX = 18 * S;
-  const shoulderY = (usesSheriffSprite(fighter) ? -188 * S : -52 * S) + kY;
+  const shoulderY = (usesSheriffSprite(fighter) ? -171 * S : -52 * S) + kY;
   ctx.translate(shoulderX, shoulderY);
 
   // Em P2 o contexto já está espelhado: convertemos o ângulo mundial
@@ -1484,7 +1465,7 @@ function getMuzzleWorldCoords(role) {
   const kneelY = fighter.kneelProgress * (42 * scale);
 
   const shoulderX = coords.x + (isP2 ? -18 : 18) * scale;
-  const shoulderY = coords.y + ((usesSheriffSprite(fighter) ? -188 * scale : -52 * scale) + kneelY);
+  const shoulderY = coords.y + ((usesSheriffSprite(fighter) ? -171 * scale : -52 * scale) + kneelY);
 
   const angle = fighter.aimAngle;
   const gunLength = 95 * scale;
@@ -1516,6 +1497,20 @@ function getFighterActiveHitboxes(fighter, role) {
       });
     }
 
+    // Prioriza o braço armado: sua hitbox cruza parcialmente a do tronco.
+    // Sem esta ordem, tiros próximos ao ombro eram classificados como torso.
+    const shoulder = getMuzzleWorldCoords(role);
+    const armEndX = shoulder.shoulderX + Math.cos(fighter.aimAngle) * 42 * scale;
+    const armEndY = shoulder.shoulderY + Math.sin(fighter.aimAngle) * 42 * scale;
+    boxes.push({
+      part: 'arm',
+      damage: 20,
+      x: Math.min(shoulder.shoulderX, armEndX) - 7 * scale,
+      y: Math.min(shoulder.shoulderY, armEndY) - 7 * scale,
+      w: Math.abs(armEndX - shoulder.shoulderX) + 14 * scale,
+      h: Math.abs(armEndY - shoulder.shoulderY) + 14 * scale
+    });
+
     boxes.push({
       part: 'torso',
       damage: 40,
@@ -1523,18 +1518,6 @@ function getFighterActiveHitboxes(fighter, role) {
       y: y - 184 * scale + kneelY,
       w: 64 * scale,
       h: 92 * scale
-    });
-
-    const shoulder = getMuzzleWorldCoords(role);
-    const armEndX = shoulder.shoulderX + Math.cos(fighter.aimAngle) * 42 * scale;
-    const armEndY = shoulder.shoulderY + Math.sin(fighter.aimAngle) * 42 * scale;
-    boxes.push({
-      part: 'arm',
-      damage: 20,
-      x: Math.min(shoulder.shoulderX, armEndX) - 8 * scale,
-      y: Math.min(shoulder.shoulderY, armEndY) - 8 * scale,
-      w: Math.abs(armEndX - shoulder.shoulderX) + 16 * scale,
-      h: Math.abs(armEndY - shoulder.shoulderY) + 16 * scale
     });
 
     boxes.push({
@@ -3101,7 +3084,6 @@ function renderCharacterMiniPreview(canvasEl, charIdx, color) {
   const charData = GUNSLINGERS[charIdx];
   if (charData.id === 'sheriff' && color === OUTFIT_COLORS[0] && sheriffSpriteSheet.complete && sheriffSpriteSheet.naturalWidth > 0) {
     renderSheriffSprite(pctx, mockFighter, 0.36 / 0.9, 0);
-    renderSpriteRestingArm(pctx, charData, 0.36, 0);
     renderArticulatedArmedArm(pctx, charData, mockFighter, 0.36, 0, false);
     pctx.restore();
     return;
