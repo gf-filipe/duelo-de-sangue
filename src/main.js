@@ -2198,7 +2198,9 @@ function displayDuelResult(winnerRole, fatalPart) {
 
     banner.textContent = isPlayerWin ? '🏆 VITÓRIA!' : '💀 DERROTA!';
     banner.style.color = isPlayerWin ? '#ffcc44' : '#cc2200';
-    sub.textContent = `${winner.name} foi o mais rápido no gatilho!`;
+    sub.textContent = fatalPart === 'forfeit'
+      ? `${winner.name} venceu por abandono do oponente!`
+      : `${winner.name} foi o mais rápido no gatilho!`;
     winner.score++;
 
     recordWinInLeaderboard(winner.name);
