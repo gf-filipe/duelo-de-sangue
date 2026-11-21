@@ -4,9 +4,10 @@
 1. Receba **uma única tarefa** com escopo delimitado (do PLAN).
 2. Investigue os arquivos relevantes ao escopo (não o repositório inteiro).
 3. Implemente a menor alteração que resolve.
-4. Execute verificações pertinentes (skill `game-testing`, checklist de regressão).
-5. Apresente: arquivos alterados, decisões, resultados dos testes, limitações.
-6. **Pare e aguarde aprovação** antes da próxima tarefa.
+4. Execute as verificações pertinentes (skill `game-testing`) e gere os cenários de validação manual passo a passo com resultados esperados (skill `gameplay-validation`).
+5. Apresente: arquivos alterados, decisões, resultados dos testes, cenários de validação manual e o que NÃO foi testado.
+6. Ao concluir, prepare a mensagem de commit (skill `git-commit-guidelines`): revise o diff e o `git status`, **nunca** faça commit automaticamente e alerte se houver mudanças fora do escopo da task.
+7. **Pare e aguarde aprovação** antes da próxima tarefa.
 
 ## Regras
 - **Uma tarefa por vez.** Não implemente o backlog inteiro de uma vez.
