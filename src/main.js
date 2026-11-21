@@ -122,6 +122,10 @@ let countdownCurrentSec = 3;
 let countdownEverStarted = false;
 let forfeitTimers = { p1: null, p2: null };
 let fireInstantTimestamp = 0;
+// Regra Gunblood: o vencedor é travado pelo PRIMEIRO dano letal da rodada.
+// Mortes posteriores (ex.: bala já em voo do adversário) continuam valendo como
+// efeito visual, mas não alteram este registro.
+let firstLethalHit = null; // { attackerRole, fatalPart, timestamp }
 let cpuAimTimer = null;
 let animationFrameId = null;
 let lastFrameTimestamp = 0;
@@ -2027,10 +2031,17 @@ function updateDroppedWeapons(dt) {
 function handleFighterDeath(victimRole, attackerRole, fatalPart) {
   const victim = victimRole === 'p1' ? fighter1 : fighter2;
   victim.isDead = true;
+
+  // Regra Gunblood: o vencedor é quem aplicou o PRIMEIRO dano letal da rodada.
+  // Se este já foi travado, a segunda morte (bala em voo do adversário) apenas
+  // mantém o efeito visual; não reagenda resultado nem sobrescreve o vencedor.
+  if (firstLethalHit !== null) return;
+
+  firstLethalHit = { attackerRole, fatalPart, timestamp: performance.now() };
   currentPhase = 'round_over';
   audioEngine.playFuneralBell();
   setTimeout(() => {
-    displayDuelResult(attackerRole, fatalPart);
+    displayDuelResult(firstLethalHit.attackerRole, firstLethalHit.fatalPart);
   }, 1300);
 }
 
@@ -2337,6 +2348,7 @@ function beginNewRound() {
   bloodDrops = [];
   severedHeads = [];
   fireInstantTimestamp = 0;
+  firstLethalHit = null;
 
   document.getElementById('countdownContainer').style.display = 'flex';
   document.getElementById('countdownBigNum').textContent = '';
@@ -2537,6 +2549,13 @@ function scheduleCPUAimAndShot() {
 // ==========================================================================
 
 function displayDuelResult(winnerRole, fatalPart) {
+  // Autoridade do resultado: quando houve dano letal na rodada, o vencedor é o
+  // primeiro a mata-lo (firstLethalHit), independentemente da ordem em que os
+  // projéteis foram resolvidos. Isso garante resultado determinístico no Gunblood.
+  if (firstLethalHit) {
+    winnerRole = firstLethalHit.attackerRole;
+    fatalPart = firstLethalHit.fatalPart;
+  }
   const modal = document.getElementById('resultModal');
   const banner = document.getElementById('resultBanner');
   const sub = document.getElementById('resultSubtitle');
