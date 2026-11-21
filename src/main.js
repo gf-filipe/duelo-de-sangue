@@ -1892,11 +1892,10 @@ function updateBulletsPhysics(dt) {
       let hitFound = false;
 
       for (const box of hitboxes) {
+        // Fonte única de colisão AABB: DuelPhysics (src/physics.js), sempre carregado antes de main.js.
         const intersectsBox = box.capsule
           ? segmentIntersectsCapsule(b.prevX, b.prevY, b.x, b.y, box.capsule)
-          : (window.DuelPhysics
-              ? window.DuelPhysics.segmentIntersectsAabb(b.prevX, b.prevY, b.x, b.y, box)
-              : checkLineAABB(b.prevX, b.prevY, b.x, b.y, box.x, box.y, box.w, box.h));
+          : window.DuelPhysics.segmentIntersectsAabb(b.prevX, b.prevY, b.x, b.y, box);
         if (intersectsBox) {
           hitFound = true;
           // O host (P1) é a autoridade de colisão/dano no multiplayer.
@@ -1930,27 +1929,6 @@ function updateBulletsPhysics(dt) {
   }
 
   checkAmmoOutcome();
-}
-
-function checkLineAABB(x1, y1, x2, y2, rx, ry, rw, rh) {
-  if (window.DuelPhysics) {
-    return window.DuelPhysics.segmentIntersectsAabb(x1, y1, x2, y2, { x: rx, y: ry, w: rw, h: rh });
-  }
-  const dx = x2 - x1, dy = y2 - y1;
-  let tMin = 0, tMax = 1;
-  const p = [-dx, dx, -dy, dy];
-  const q = [x1 - rx, rx + rw - x1, y1 - ry, ry + rh - y1];
-  for (let i = 0; i < 4; i++) {
-    if (Math.abs(p[i]) < 1e-9) {
-      if (q[i] < 0) return false;
-      continue;
-    }
-    const t = q[i] / p[i];
-    if (p[i] < 0) tMin = Math.max(tMin, t);
-    else tMax = Math.min(tMax, t);
-    if (tMin > tMax) return false;
-  }
-  return true;
 }
 
 function applyHitDamage(attackerRole, victimRole, part, damage, hitX, hitY) {

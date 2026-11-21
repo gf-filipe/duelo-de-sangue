@@ -1,0 +1,81 @@
+# ============================================================================
+# .clineignore — Filtragem de contexto para o Cline
+# OBJETIVO: reduzir tokens/contexto automático SEM esconder nada essencial para
+# compreender ou modificar o jogo (código, docs, config, testes, assets do jogo).
+#
+# LIMITAÇÃO: .clineignore é apenas filtro de contexto (hint). Não é proteção de
+# segredos nem controle de acesso. O suporte pode variar por versão do Cline.
+# ============================================================================
+
+# --- Dependências e build (não existem hoje; previne quando surgirem) ---
+node_modules/
+dist/
+build/
+.nuxt/
+.output/
+.next/
+out/
+
+# --- Git e metadados ---
+.git/
+.gitattributes
+
+# --- Cache e temporários ---
+.cache/
+.tmp/
+.temp/
+temp/
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+*.bak
+*.orig
+
+# --- Logs ---
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- Relatórios e cobertura ---
+coverage/
+.nyc_output/
+*.lcov
+*.coverage
+
+# --- Artefatos de deploy (Netlify) ---
+.netlify/
+netlify-deploy/
+
+# --- IDE / editores (não afetam o jogo) ---
+.vscode/
+.idea/
+*.sublime-workspace
+*.code-workspace
+
+# --- Sistema operacional ---
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# --- Binários grandes que não precisam ser lidos automaticamente ---
+# (Não ignoramos assets/sprites/*.png: são referenciados no código e ajudam a
+#  entender a implementação visual. Leia-os apenas quando a tarefa exigir.)
+*.psd
+*.ai
+*.sketch
+*.zip
+*.rar
+*.7z
+*.tar
+*.gz
+
+# --- Observação ---
+# NÃO ignorar: código-fonte (src/, *.js), index.html, assets/css/, README.md,
+# netlify.toml, server.js, netlify.toml, package.json, testes, assets do jogo.

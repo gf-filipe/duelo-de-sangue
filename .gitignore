@@ -1,0 +1,9 @@
+# ============================================================================
+# .gitignore — Duelo de Sangue
+# NOTA: .cline/skills/, .cline/rules/ e .clineignore são configurações
+# compartilhadas do projeto e DEVEM ser versionados. Não ignorar .cline/ inteiro.
+# ============================================================================
+
+# Instruções globais pessoais do Cline + artefatos de instalação do ambiente
+# Windows — não fazem parte das configurações compartilhadas do jogo.
+/.cline/global-rules-prep/
