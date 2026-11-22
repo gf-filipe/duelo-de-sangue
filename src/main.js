@@ -9,6 +9,9 @@
 // Mantidos os mesmos nomes locais para não alterar o restante do arquivo.
 const { GUNSLINGERS, OUTFIT_COLORS, OUTFIT_COLOR_NAMES, BULLET_SPEED, GROUND_RATIO } = window.DuelConstants;
 
+// Fábrica de lutadores em src/state.js (window.DuelState), carregado antes deste script.
+const { createFighterState } = window.DuelState;
+
 // ==================== ESTADO DO JOGO ====================
 let screenW = window.innerWidth;
 let screenH = window.innerHeight;
@@ -75,45 +78,6 @@ sheriffSpriteSheet.addEventListener('load', () => {
   const grid = document.getElementById('charPickerGrid');
   if (grid && grid.children.length) refreshCharacterPreviews();
 });
-
-// ==================== FÁBRICA DE LUTADORES ====================
-function createFighterState(name, charIdx, color) {
-  return {
-    name: name,
-    charIdx: charIdx,
-    customColor: color,
-    hp: 100,
-    maxHp: 100,
-    bullets: 6,
-    score: 0,
-    shotsFired: 0,
-    shotsHit: 0,
-    reactionTimeMs: 0,
-    holdingDrum: false,
-    readyForRematch: false,
-
-    // Estados anatômicos e de dano
-    isKneeling: false,     // Ajoelhado (tiro nas pernas)
-    kneelProgress: 0,     // Interpolação para abaixar a hitbox suavemente
-    isHeadless: false,     // Decapitado (Headshot)
-    isBleeding: false,     // Sangramento ativo no tronco
-    isDisarmed: false,     // Revólver perdido após tiro no braço armado
-    bleedDamageAccum: 0,
-    isDead: false,
-
-    // Articulação e Física
-    aimAngle: 0,          // Ângulo do braço com o revólver (mira no cursor!)
-    recoilAngle: 0,       // Coice vertical ao atirar
-    knockbackX: 0,        // Recuo ao tomar tiro
-    deathFallAngle: 0,
-    deathFallY: 0,
-    drumRotation: 0,
-
-    consecutiveShots: 0,
-    lastShotTime: 0,
-    bulletHoles: []
-  };
-}
 
 // ==========================================================================
 // MÓDULO DE ÁUDIO SINTÉTICO (WEB AUDIO API - ZERO ARQUIVOS MP3)
