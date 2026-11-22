@@ -87,21 +87,36 @@ let audioEngine = {
   masterVolume: null,
   canyonReverbNode: null,
   isWhistling: false,
+  disabled: false, // true se o Web Audio API falhar (o jogo segue sem som)
 
   init() {
-    if (this.ctx) return;
+    // Error boundary: sem Web Audio API ou se a criação falhar, desativa o áudio
+    // silenciosamente. Todos os métodos play* já são no-op quando this.ctx é null.
+    if (this.ctx || this.disabled) return;
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    this.ctx = new AudioContextClass();
-    this.masterVolume = this.ctx.createGain();
-    this.masterVolume.gain.value = isAudioMuted ? 0 : 0.65;
-    this.masterVolume.connect(this.ctx.destination);
-    this.createCanyonReverb();
+    if (!AudioContextClass) {
+      this.disabled = true;
+      console.warn('Web Audio API indisponível: áudio desativado.');
+      return;
+    }
+    try {
+      this.ctx = new AudioContextClass();
+      this.masterVolume = this.ctx.createGain();
+      this.masterVolume.gain.value = isAudioMuted ? 0 : 0.65;
+      this.masterVolume.connect(this.ctx.destination);
+      this.createCanyonReverb();
+    } catch (err) {
+      this.disabled = true;
+      this.ctx = null;
+      this.masterVolume = null;
+      console.warn('Falha ao inicializar o áudio (seguindo sem som):', err);
+    }
   },
 
   resume() {
     this.init();
     if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume();
+      try { this.ctx.resume(); } catch (e) { /* resume pode falhar; ignorável */ }
     }
   },
 
@@ -2734,6 +2749,13 @@ function startJoinRoom() {
 function initPeerJS(id) {
   if (peerConnection) {
     try { peerConnection.destroy(); } catch (e) {}
+    peerConnection = null;
+  }
+  // Error boundary: PeerJS vem de CDN; se falhou ao carregar, não quebra o jogo.
+  if (typeof Peer === 'undefined') {
+    console.warn('PeerJS não carregado (CDN indisponível): multiplayer desativado.');
+    showNotification('Multiplayer indisponível: falha ao carregar P2P.', 4000);
+    return;
   }
   try {
     peerConnection = new Peer(id, {
@@ -2762,7 +2784,9 @@ function initPeerJS(id) {
       showNotification('Conexão P2P: ' + (err.type || 'verifique a rede'), 3500);
     });
   } catch (err) {
+    peerConnection = null;
     console.error('PeerJS init:', err);
+    showNotification('Não foi possível iniciar o P2P.', 3500);
   }
 }
 
@@ -3004,9 +3028,18 @@ function checkDrumHoldingBounds(mx, my) {
 // ==========================================================================
 
 function gameAnimationLoop(timestamp) {
+  // Error boundary: se o canvas principal ou do menu forem perdidos (ex.: resize
+  // remove o elemento), encerra o loop em vez de logar erros indefinidamente.
+  if (!mainCtx || !menuCtxEl) {
+    console.error('gameAnimationLoop abortado: canvas indisponível.');
+    return;
+  }
+
   const dt = Math.min((timestamp - lastFrameTimestamp) / 1000, 0.05);
   lastFrameTimestamp = timestamp;
 
+  // Error boundary de renderização: uma exceção em um frame não encerra o loop.
+  try {
   if (currentPhase !== 'menu' && currentPhase !== 'load') {
     // 1. Cenário Coeso
     renderGunbloodEnvironment(mainCtx, dt);
@@ -3033,6 +3066,9 @@ function gameAnimationLoop(timestamp) {
     renderGunbloodCrosshair(mainCtx, cursorAimX, cursorAimY);
   } else if (currentPhase === 'menu') {
     renderMenuAnimation(dt);
+  }
+  } catch (err) {
+    console.error('Erro no loop de renderização:', err);
   }
 
   animationFrameId = requestAnimationFrame(gameAnimationLoop);
@@ -3252,9 +3288,17 @@ window.addEventListener('resize', handleWindowResize);
 
 function initDueloDeSangue() {
   mainCanvas = document.getElementById('gameCanvas');
-  mainCtx = mainCanvas.getContext('2d');
   menuCanvasEl = document.getElementById('menuCanvasBg');
-  menuCtxEl = menuCanvasEl.getContext('2d');
+  // Error boundary: sem os elementos/canvas 2D, aborta com aviso em vez de quebrar.
+  mainCtx = mainCanvas ? mainCanvas.getContext('2d') : null;
+  menuCtxEl = menuCanvasEl ? menuCanvasEl.getContext('2d') : null;
+  if (!mainCanvas || !mainCtx || !menuCanvasEl || !menuCtxEl) {
+    console.error('Canvas 2D indisponível: jogo não pode iniciar.');
+    if (typeof showNotification === 'function') {
+      showNotification('Erro: seu navegador não suporta Canvas 2D.', 8000);
+    }
+    return;
+  }
 
   handleWindowResize();
   initBackgroundElements();
